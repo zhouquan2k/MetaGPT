@@ -8,7 +8,7 @@ import os
 import openai
 import yaml
 
-from metagpt.const import PROJECT_ROOT
+from metagpt.const import PROJECT_ROOT, WORKSPACE_ROOT
 from metagpt.logs import logger
 from metagpt.tools import SearchEngineType, WebBrowserEngineType
 from metagpt.utils.singleton import Singleton
@@ -84,6 +84,7 @@ class Config(metaclass=Singleton):
         self.calc_usage = self._get("CALC_USAGE", True)
         self.model_for_researcher_summary = self._get("MODEL_FOR_RESEARCHER_SUMMARY")
         self.model_for_researcher_report = self._get("MODEL_FOR_RESEARCHER_REPORT")
+        self.workspace_root_path = self._get("WORKSPACE_ROOT_PATH", WORKSPACE_ROOT)
 
     def _init_with_config_files_and_env(self, configs: dict, yaml_file):
         """从config/key.yaml / config/config.yaml / env三处按优先级递减加载"""

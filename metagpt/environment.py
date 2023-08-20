@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from metagpt.memory import Memory
 from metagpt.roles import Role
 from metagpt.schema import Message
+from metagpt.artifact.workspace import Workspace
+from metagpt.config import CONFIG
 
 
 class Environment(BaseModel):
@@ -24,9 +26,13 @@ class Environment(BaseModel):
     roles: dict[str, Role] = Field(default_factory=dict)
     memory: Memory = Field(default_factory=Memory)
     history: str = Field(default='')
+    workspace: Workspace = None
 
     class Config:
         arbitrary_types_allowed = True
+
+    def init(self, project_name):
+        self.workspace = Workspace(project_name, CONFIG.workspace_root_path)
 
     def add_role(self, role: Role):
         """增加一个在当前环境的角色

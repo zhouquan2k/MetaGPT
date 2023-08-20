@@ -7,6 +7,7 @@
 """
 from abc import ABC
 from typing import Optional
+import json
 
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -58,7 +59,8 @@ class Action(ABC):
         logger.debug(content)
         output_class = ActionOutput.create_model_class(output_class_name, output_data_mapping)
         parsed_data = OutputParser.parse_data_with_mapping(content, output_data_mapping)
-        logger.debug(parsed_data)
+
+        logger.debug(json.dumps(parsed_data, indent=4))
         instruct_content = output_class(**parsed_data)
         return ActionOutput(content, instruct_content)
 

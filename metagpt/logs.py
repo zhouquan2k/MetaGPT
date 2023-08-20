@@ -23,4 +23,4 @@ def define_log_level(print_level="INFO", logfile_level="DEBUG"):
     return _logger
 
 
-logger = define_log_level()
+logger = define_log_level("DEBUG")

@@ -113,6 +113,7 @@ class Role:
             else:
                 i = action
             i.set_prefix(self._get_prefix(), self.profile)
+            i.context = self._rc
             self._actions.append(i)
             self._states.append(f"{idx}. {action}")
 
