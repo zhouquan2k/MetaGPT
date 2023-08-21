@@ -11,6 +11,7 @@ from metagpt.actions import Action, ActionOutput
 from metagpt.actions.search_and_summarize import SearchAndSummarize
 from metagpt.logs import logger
 from metagpt.artifact.artifact import Artifact
+import asyncio
 
 PROMPT_TEMPLATE = """
 # Context
@@ -143,7 +144,10 @@ class WritePRD(Action):
         prompt = PROMPT_TEMPLATE.format(requirements=requirements, search_information=info,
                                         format_example=FORMAT_EXAMPLE)
         logger.debug(prompt)
-        prd = await self._aask_v1(prompt, "prd", OUTPUT_MAPPING)
-        Artifact('PRD', self.context.env.workspace, prd.content).save('docs', '1.md')
-
+        if len(requirements) == 1 and requirements[0].simulate:
+            prd = Artifact.load(self.context.env.workspace, 'docs/PRD_1.md').content
+            await asyncio.sleep(3)
+        else:
+            prd = await self._aask_v1(prompt, "prd", OUTPUT_MAPPING)
+            Artifact('PRD', self.context.env.workspace, prd.content).save('docs', '1.md')
         return prd

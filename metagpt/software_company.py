@@ -52,19 +52,23 @@ class SoftwareCompany(BaseModel):
         self.environment.init(name)
         self.environment.publish_message(Message(role="BOSS", content=idea, cause_by=BossRequirement))
 
-    async def run_project_one_step(self, name, new_artifact):
-        self.environment.init(name)
-        msg = self.load_artifact(new_artifact)
+    async def run_project_one_step(self, new_artifact, prompt=None, simulate=False):
+        artifact = self.load_artifact(new_artifact)
+        msg = self._get_artifact_msg(artifact, prompt)
+        msg.simulate = simulate
         self.environment.publish_message(msg)
         await self.environment.run()
 
     def load_artifact(self, artifact_path):
-        artifact = Artifact.load(self.environment.workspace, artifact_path)
-        type_action_map = {
-            'PRD': ActionType.WRITE_PRD
-        }
-        return Message(content=artifact.content, cause_by=type_action_map[artifact.type].value)
+        return Artifact.load(self.environment.workspace, artifact_path)
 
+    def _get_artifact_msg(self, artifact, prompt):
+        type_action_map = {
+            'RAW': ActionType.ADD_REQUIREMENT,
+            'PRD': ActionType.WRITE_PRD,
+            'DESIGN': ActionType.WRITE_DESIGN
+        }
+        return Message(content=prompt if prompt else artifact.content, cause_by=type_action_map[artifact.type].value)
 
     def _save(self):
         logger.info(self.json())
