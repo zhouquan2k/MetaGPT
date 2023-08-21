@@ -14,6 +14,7 @@ from metagpt.const import WORKSPACE_ROOT
 from metagpt.logs import logger
 from metagpt.utils.common import CodeParser
 from metagpt.utils.mermaid import mermaid_to_file
+from metagpt.artifact.artifact import Artifact
 
 PROMPT_TEMPLATE = """
 # Context
@@ -118,6 +119,7 @@ class WriteDesign(Action):
         system_design_file = docs_path / 'system_design.md'
         logger.info(f"Saving System Designs to {system_design_file}")
         system_design_file.write_text(content)
+        Artifact('DESIGN', self.context.env.workspace, content).save('docs', '1.md')
 
     def _save(self, context, system_design):
         if isinstance(system_design, ActionOutput):

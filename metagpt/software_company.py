@@ -14,6 +14,8 @@ from metagpt.logs import logger
 from metagpt.roles import Role
 from metagpt.schema import Message
 from metagpt.utils.common import NoMoneyException
+from metagpt.artifact import Artifact
+from metagpt.actions import ActionType
 
 
 class SoftwareCompany(BaseModel):
@@ -50,11 +52,18 @@ class SoftwareCompany(BaseModel):
         self.environment.init(name)
         self.environment.publish_message(Message(role="BOSS", content=idea, cause_by=BossRequirement))
 
-    def run_project_one_step(self, name, new_artifact):
+    async def run_project_one_step(self, name, new_artifact):
         self.environment.init(name)
-        # TODO
         msg = self.load_artifact(new_artifact)
         self.environment.publish_message(msg)
+        await self.environment.run()
+
+    def load_artifact(self, artifact_path):
+        artifact = Artifact.load(self.environment.workspace, artifact_path)
+        type_action_map = {
+            'PRD': ActionType.WRITE_PRD
+        }
+        return Message(content=artifact.content, cause_by=type_action_map[artifact.type].value)
 
 
     def _save(self):

@@ -144,6 +144,6 @@ class WritePRD(Action):
                                         format_example=FORMAT_EXAMPLE)
         logger.debug(prompt)
         prd = await self._aask_v1(prompt, "prd", OUTPUT_MAPPING)
-        Artifact('PRD', self.context.env.workspace, prd.content).save('docs/prd.md')
+        Artifact('PRD', self.context.env.workspace, prd.content).save('docs', '1.md')
 
         return prd
