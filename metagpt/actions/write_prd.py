@@ -141,13 +141,18 @@ class WritePRD(Action):
             logger.info(sas.result)
             logger.info(rsp)
 
-        prompt = PROMPT_TEMPLATE.format(requirements=requirements, search_information=info,
-                                        format_example=FORMAT_EXAMPLE)
-        logger.debug(prompt)
-        if len(requirements) == 1 and requirements[0].simulate:
-            prd = Artifact.load(self.context.env.workspace, 'docs/PRD_1.md').content
-            await asyncio.sleep(3)
+        prd = None
+        is_first_time = len(requirements) == 1
+        if is_first_time:
+            simulate = None
+            if requirements[0].simulate:
+                simulate = Artifact.load(self.context.env.workspace, 'docs/PRD_1.md').content
+                await asyncio.sleep(3)
+            prompt = PROMPT_TEMPLATE.format(requirements=requirements, search_information=info,
+                                                format_example=FORMAT_EXAMPLE)
+            logger.debug(prompt)
+            prd = await self._aask_v1(prompt, "prd",  OUTPUT_MAPPING, simulate=simulate)
         else:
-            prd = await self._aask_v1(prompt, "prd", OUTPUT_MAPPING)
-            Artifact('PRD', self.context.env.workspace, prd.content).save('docs', '1.md')
+            prd = await self._aask_v1(requirements[-1].content, "prd", OUTPUT_MAPPING)
+        Artifact('PRD', self.context.env.workspace, prd.content).save('docs', '1.md')
         return prd

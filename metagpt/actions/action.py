@@ -47,15 +47,24 @@ class Action(ABC):
         system_msgs.append(self.prefix)
         return await self.llm.aask(prompt, system_msgs)
 
-    @retry(stop=stop_after_attempt(2), wait=wait_fixed(1))
+    # @retry(stop=stop_after_attempt(2), wait=wait_fixed(1))
     async def _aask_v1(self, prompt: str, output_class_name: str,
                        output_data_mapping: dict,
+                       simulate: str = None,
                        system_msgs: Optional[list[str]] = None) -> ActionOutput:
         """Append default prefix"""
         if not system_msgs:
             system_msgs = []
         system_msgs.append(self.prefix)
-        content = await self.llm.aask(prompt, system_msgs)
+        content = None
+        if simulate:
+            content = simulate
+            self.context.historyMessages.append(self.llm._user_msg(prompt))
+            self.context.historyMessages.append(self.llm._assistant_msg(content))
+        else:
+            logger.debug(system_msgs)
+            logger.debug(prompt)
+            content = await self.llm.aask(prompt, system_msgs, history=self.context.historyMessages)
         logger.debug(content)
         output_class = ActionOutput.create_model_class(output_class_name, output_data_mapping)
         parsed_data = OutputParser.parse_data_with_mapping(content, output_data_mapping)

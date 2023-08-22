@@ -56,6 +56,7 @@ class SoftwareCompany(BaseModel):
         artifact = self.load_artifact(new_artifact)
         msg = self._get_artifact_msg(artifact, prompt)
         msg.simulate = simulate
+        self.environment.single_step = True
         self.environment.publish_message(msg)
         await self.environment.run()
 

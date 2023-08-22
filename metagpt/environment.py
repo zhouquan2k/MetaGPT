@@ -27,6 +27,7 @@ class Environment(BaseModel):
     memory: Memory = Field(default_factory=Memory)
     history: str = Field(default='')
     workspace: Workspace = None
+    single_step: bool = False
 
     class Config:
         arbitrary_types_allowed = True
