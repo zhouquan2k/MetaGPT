@@ -67,7 +67,8 @@ class SoftwareCompany(BaseModel):
         type_action_map = {
             'RAW': ActionType.ADD_REQUIREMENT,
             'PRD': ActionType.WRITE_PRD,
-            'DESIGN': ActionType.WRITE_DESIGN
+            'DESIGN': ActionType.WRITE_DESIGN,
+            'TASK': ActionType.WRITE_TASKS
         }
         return Message(content=prompt if prompt else artifact.content, cause_by=type_action_map[artifact.type].value)
 

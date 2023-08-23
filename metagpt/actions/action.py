@@ -16,6 +16,12 @@ from metagpt.llm import LLM
 from metagpt.utils.common import OutputParser
 from metagpt.logs import logger
 
+USER_PROMPT = '''
+{user_prompt} 
+
+REMEMBER: Always output the full PRD even when part of it need to be modified.   
+'''
+
 class Action(ABC):
     def __init__(self, name: str = '', context=None, llm: LLM = None):
         self.name: str = name

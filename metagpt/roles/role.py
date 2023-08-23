@@ -18,6 +18,8 @@ from metagpt.llm import LLM
 from metagpt.logs import logger
 from metagpt.memory import Memory, LongTermMemory
 from metagpt.schema import Message
+from metagpt.artifact import Artifact
+import asyncio
 
 PREFIX_TEMPLATE = """You are a {profile}, named {name}, your goal is {goal}, and the constraint is {constraints}. {etc}"""
 
@@ -168,7 +170,18 @@ class Role:
         #                                history=self.history)
 
         logger.info(f"{self._setting}: ready to {self._rc.todo}")
-        response = await self._rc.todo.run(self._rc.important_memory)
+
+        input = self._rc.important_memory
+        is_first_time = len(input) == 1
+        prompt = None
+        simulate = False
+        if is_first_time:
+            if input[0].simulate:
+                simulate = True
+        else:
+            prompt = input[-1].content
+        response = await self._rc.todo.run(self._rc.important_memory, simulate=simulate, prompt=prompt)
+
         # logger.info(response)
         if isinstance(response, ActionOutput):
             msg = Message(content=response.content, instruct_content=response.instruct_content,

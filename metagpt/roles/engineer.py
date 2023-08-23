@@ -76,12 +76,15 @@ class Engineer(Role):
         return CodeParser.parse_str(block="Python package name", text=system_design_msg.content)
 
     def get_workspace(self) -> Path:
+        '''
         msg = self._rc.memory.get_by_action(WriteDesign)[-1]
         if not msg:
             return WORKSPACE_ROOT / 'src'
         workspace = self.parse_workspace(msg)
         # Codes are written in workspace/{package_name}/{package_name}
         return WORKSPACE_ROOT / workspace / workspace
+        '''
+        return self._rc.env.workspace.rootPath / 'src'
 
     def recreate_workspace(self):
         workspace = self.get_workspace()

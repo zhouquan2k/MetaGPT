@@ -15,6 +15,7 @@ from metagpt.logs import logger
 from metagpt.utils.common import CodeParser
 from metagpt.utils.mermaid import mermaid_to_file
 from metagpt.artifact.artifact import Artifact
+from metagpt.actions.action import USER_PROMPT
 
 PROMPT_TEMPLATE = """
 # Context
@@ -106,8 +107,8 @@ class WriteDesign(Action):
 
     def _save_prd(self, docs_path, resources_path, prd):
         prd_file = docs_path / 'prd.md'
-        quadrant_chart = CodeParser.parse_code(block="Competitive Quadrant Chart", text=prd)
-        mermaid_to_file(quadrant_chart, resources_path / 'competitive_analysis')
+        # quadrant_chart = CodeParser.parse_code(block="Competitive Quadrant Chart", text=prd)
+        # mermaid_to_file(quadrant_chart, resources_path / 'competitive_analysis')
         logger.info(f"Saving PRD to {prd_file}")
         prd_file.write_text(prd)
 
@@ -137,9 +138,14 @@ class WriteDesign(Action):
         self._save_prd(docs_path, resources_path, context[-1].content)
         self._save_system_design(docs_path, resources_path, content)
 
-    async def run(self, context):
-        prompt = PROMPT_TEMPLATE.format(context=context, format_example=FORMAT_EXAMPLE)
+    async def run(self, context, simulate=False, prompt=None):
+        if not prompt:
+            prompt = PROMPT_TEMPLATE.format(context=context, format_example=FORMAT_EXAMPLE)
+        else:
+            prompt = USER_PROMPT.format(user_prompt=prompt)
+        simulate_content = Artifact.load(self.context.env.workspace, 'docs/DESIGN_1.md').content if simulate else None
         # system_design = await self._aask(prompt)
-        system_design = await self._aask_v1(prompt, "system_design", OUTPUT_MAPPING)
+        system_design = await self._aask_v1(prompt, "system_design", OUTPUT_MAPPING, simulate=simulate_content)
         self._save(context, system_design)
         return system_design
+
