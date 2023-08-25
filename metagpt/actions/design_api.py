@@ -14,8 +14,28 @@ from metagpt.const import WORKSPACE_ROOT
 from metagpt.logs import logger
 from metagpt.utils.common import CodeParser
 from metagpt.utils.mermaid import mermaid_to_file
-from metagpt.artifact.artifact import Artifact
+from metagpt.artifact.artifact import Artifact, ArtifactType
 from metagpt.actions.action import USER_PROMPT
+from metagpt.schema import Task
+from metagpt.actions import PromptType
+
+TASK_PROMPT = """
+# Origin Version
+{content}
+
+# Comment
+{description}
+
+# Format example
+{format_example}
+
+-----
+Role: You are an architect; the goal is to design a SOTA PEP8-compliant python system; make the best use of good open source tools
+Requirement: The content below 'Origin Version' section is the design you previously given. now We gave some comments in 'Comment' section.  
+please revise the sections as required by these comments, you can only output sections that modified.
+Max Output: 8192 chars or 2048 tokens. Try to use them up.
+Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote
+"""
 
 PROMPT_TEMPLATE = """
 # Context
@@ -82,13 +102,15 @@ The requirement is clear to me.
 ---
 """
 OUTPUT_MAPPING = {
-    "Implementation approach": (str, ...),
-    "Python package name": (str, ...),
-    "File list": (List[str], ...),
-    "Data structures and interface definitions": (str, ...),
-    "Program call flow": (str, ...),
-    "Anything UNCLEAR": (str, ...),
+    "Implementation approach": {'python_type': (str, ...), 'type': 'text'},
+    "Python package name": {'python_type': (str, ...), 'type': 'python'},
+    "File list": {'python_type': (List[str], ...), 'type': 'python'},
+    "Data structures and interface definitions": {'python_type': (str, ...), 'type': 'mermaid'},
+    "Program call flow":  {'python_type': (str, ...), 'type': 'mermaid'},
+    "Anything UNCLEAR": {'python_type': (str, ...), 'type': 'text'}
 }
+
+
 
 
 class WriteDesign(Action):
@@ -97,6 +119,8 @@ class WriteDesign(Action):
         self.desc = "Based on the PRD, think about the system design, and design the corresponding APIs, " \
                     "data structures, library tables, processes, and paths. Please provide your design, feedback " \
                     "clearly and in detail."
+        self._output_mapping = OUTPUT_MAPPING
+        self._output_cls_name = "system_design"
 
     def recreate_workspace(self, workspace: Path):
         try:
@@ -120,7 +144,7 @@ class WriteDesign(Action):
         system_design_file = docs_path / 'system_design.md'
         logger.info(f"Saving System Designs to {system_design_file}")
         system_design_file.write_text(content)
-        Artifact('DESIGN', self.context.env.workspace, content).save('docs', '1.md')
+        Artifact(ArtifactType.DESIGN, content).save(self.context.env.workspace, 'docs', '1.md')
 
     def _save(self, context, system_design):
         if isinstance(system_design, ActionOutput):
@@ -148,4 +172,10 @@ class WriteDesign(Action):
         system_design = await self._aask_v1(prompt, "system_design", OUTPUT_MAPPING, simulate=simulate_content)
         self._save(context, system_design)
         return system_design
+
+    def _get_prompt(self, prompt_type: PromptType, task: Task = None, comment: str = None):
+        if prompt_type == PromptType.Task:
+            return TASK_PROMPT.format(content=task.artifact.content, description=task.description, format_example=FORMAT_EXAMPLE)
+        elif prompt_type == PromptType.Comment:
+            return comment
 

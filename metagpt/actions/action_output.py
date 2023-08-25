@@ -21,6 +21,7 @@ class ActionOutput:
 
     @classmethod
     def create_model_class(cls, class_name: str, mapping: Dict[str, Type]):
+        mapping = {key: value['python_type'] for key, value in mapping.items()}
         new_class = create_model(class_name, **mapping)
 
         @validator('*', allow_reuse=True)

@@ -126,7 +126,7 @@ class OutputParser:
                 content = cls.parse_code(text=content)
             except Exception:
                 pass
-            typing_define = mapping.get(block, None)
+            typing_define = mapping.get(block, {}).get('python_type', None)
             if isinstance(typing_define, tuple):
                 typing = typing_define[0]
             else:

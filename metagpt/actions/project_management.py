@@ -10,7 +10,7 @@ from typing import List, Tuple
 from metagpt.actions.action import Action
 from metagpt.const import WORKSPACE_ROOT
 from metagpt.utils.common import CodeParser
-from metagpt.artifact import Artifact
+from metagpt.artifact import Artifact, ArtifactType
 
 PROMPT_TEMPLATE = '''
 # Context
@@ -111,7 +111,7 @@ class WriteTasks(Action):
         ws_name = CodeParser.parse_str(block="Python package name", text=context[-1].content)
         file_path = WORKSPACE_ROOT / ws_name / 'docs/api_spec_and_tasks.md'
         file_path.write_text(rsp.content)
-        Artifact('TASK', self.context.env.workspace, rsp.content).save('docs', '1.md')
+        Artifact(ArtifactType.PROJECT, rsp.content).save(self.context.env.workspace, 'docs', '1.md')
 
         # Write requirements.txt
         requirements_path = WORKSPACE_ROOT / ws_name / 'requirements.txt'

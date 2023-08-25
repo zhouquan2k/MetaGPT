@@ -10,7 +10,7 @@ from typing import List, Tuple
 from metagpt.actions import Action, ActionOutput
 from metagpt.actions.search_and_summarize import SearchAndSummarize
 from metagpt.logs import logger
-from metagpt.artifact import Artifact
+from metagpt.artifact import Artifact, ArtifactType
 from metagpt.actions.action import USER_PROMPT
 
 PROMPT_TEMPLATE = """
@@ -113,5 +113,5 @@ class WritePRD(Action):
             prompt = USER_PROMPT.format(user_prompt=prompt)
         logger.debug(prompt)
         prd = await self._aask_v1(prompt, "prd", OUTPUT_MAPPING, simulate=simulate_content)
-        Artifact('PRD', self.context.env.workspace, prd.content).save('docs', '1.md')
+        Artifact(ArtifactType.PRD, prd.content).save(self.context.env.workspace, 'docs', '1.md')
         return prd

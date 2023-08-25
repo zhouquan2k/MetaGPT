@@ -17,7 +17,7 @@ from metagpt.actions import Action, ActionOutput
 from metagpt.llm import LLM
 from metagpt.logs import logger
 from metagpt.memory import Memory, LongTermMemory
-from metagpt.schema import Message
+from metagpt.schema import Message, Task, Event
 from metagpt.artifact import Artifact
 import asyncio
 
@@ -76,6 +76,9 @@ class RoleContext(BaseModel):
     watch: set[Type[Action]] = Field(default_factory=set)
     news: list[Type[Message]] = Field(default=[])
 
+    task: Task = None
+    artifact: Artifact = None
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -92,6 +95,13 @@ class RoleContext(BaseModel):
     @property
     def history(self) -> list[Message]:
         return self.memory.get()
+
+    async def comment(self, comment):
+        return await self.todo.comment(comment)
+
+    def commit(self):
+        return self.todo.commit()
+
 
 
 class Role:

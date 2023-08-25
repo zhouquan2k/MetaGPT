@@ -6,7 +6,7 @@
 @File    : __init__.py
 """
 
-from metagpt.roles.role import Role
+from metagpt.roles.role import Role, RoleContext
 from metagpt.roles.architect import Architect
 from metagpt.roles.project_manager import ProjectManager
 from metagpt.roles.product_manager import ProductManager
@@ -19,6 +19,7 @@ from metagpt.roles.customer_service import CustomerService
 
 __all__ = [
     "Role",
+    "RoleContext",
     "Architect",
     "ProjectManager",
     "ProductManager",

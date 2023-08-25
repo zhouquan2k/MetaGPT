@@ -11,11 +11,18 @@ from metagpt.actions import BossRequirement
 from metagpt.config import CONFIG
 from metagpt.environment import Environment
 from metagpt.logs import logger
-from metagpt.roles import Role
-from metagpt.schema import Message
+from metagpt.roles import Role, RoleContext
+from metagpt.schema import Message, Task
 from metagpt.utils.common import NoMoneyException
-from metagpt.artifact import Artifact
+from metagpt.artifact import Artifact, ArtifactType
 from metagpt.actions import ActionType
+from metagpt.llm import LLM
+
+ArtifactTypeToAction = {
+    ArtifactType.RAW_REQUIREMENT: ActionType.ADD_REQUIREMENT,
+    ArtifactType.PRD: ActionType.WRITE_PRD,
+    ArtifactType.DESIGN: ActionType.WRITE_DESIGN
+}
 
 
 class SoftwareCompany(BaseModel):
@@ -52,6 +59,7 @@ class SoftwareCompany(BaseModel):
         self.environment.init(name)
         self.environment.publish_message(Message(role="BOSS", content=idea, cause_by=BossRequirement))
 
+    # TODO
     async def run_project_one_step(self, new_artifact, prompt=None, simulate=False):
         artifact = self.load_artifact(new_artifact)
         msg = self._get_artifact_msg(artifact, prompt)
@@ -60,9 +68,7 @@ class SoftwareCompany(BaseModel):
         self.environment.publish_message(msg)
         await self.environment.run()
 
-    def load_artifact(self, artifact_path):
-        return Artifact.load(self.environment.workspace, artifact_path)
-
+    # TODO
     def _get_artifact_msg(self, artifact, prompt):
         type_action_map = {
             'RAW': ActionType.ADD_REQUIREMENT,
@@ -71,6 +77,31 @@ class SoftwareCompany(BaseModel):
             'TASK': ActionType.WRITE_TASKS
         }
         return Message(content=prompt if prompt else artifact.content, cause_by=type_action_map[artifact.type].value)
+
+    def load_artifact(self, artifact_path):
+        return Artifact.load(self.environment.workspace, artifact_path)
+
+    async def add_project_task(self, task: Task) -> RoleContext:
+        # find role/action to process task
+        action_cls = ArtifactTypeToAction[task.artifact.type].value
+        context = RoleContext()
+        context.env = self.environment
+        llm = LLM()
+        action = action_cls(f'{task.artifact.type}_{task.artifact.name}', context=context, llm=llm)
+        output = await action.process_task(task)
+        logger.info(output)
+        return context
+
+    async def process_next_event(self):
+        # pick one event from queue
+        # find role/action to process event
+        # action.process_event(event)
+        event = self.environment.get_next_event()
+        if event:
+
+
+
+
 
     def _save(self):
         logger.info(self.json())

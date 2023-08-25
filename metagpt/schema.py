@@ -13,6 +13,19 @@ from typing import Type, TypedDict
 from pydantic import BaseModel
 
 from metagpt.logs import logger
+from metagpt.artifact import Artifact
+
+
+@dataclass
+class Task:
+    artifact: Artifact
+    description: str = None
+    code: str = None
+
+@dataclass
+class Event:
+    artifact: Artifact  # source artifact
+
 
 
 class RawMessage(TypedDict):

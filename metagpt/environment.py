@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from metagpt.memory import Memory
 from metagpt.roles import Role
-from metagpt.schema import Message
+from metagpt.schema import Message, Event
 from metagpt.artifact.workspace import Workspace
 from metagpt.config import CONFIG
 
@@ -28,6 +28,9 @@ class Environment(BaseModel):
     history: str = Field(default='')
     workspace: Workspace = None
     single_step: bool = False
+
+    event_queue: list[Event] = []
+
 
     class Config:
         arbitrary_types_allowed = True
@@ -73,6 +76,8 @@ class Environment(BaseModel):
 
             await asyncio.gather(*futures)
 
+    # env根据订阅负责dispatch event，而不是每个role运行一遍
+
     def get_roles(self) -> dict[str, Role]:
         """获得环境内的所有角色
            Process all Role runs at once
@@ -84,3 +89,9 @@ class Environment(BaseModel):
            get all the environment roles
         """
         return self.roles.get(name, None)
+
+    def publish_event(self, event: Event):
+        self.event_queue.append(event)
+
+    def get_next_event(self):
+        return self.event_queue.pop(0) if len(self.event_queue) > 0 else None

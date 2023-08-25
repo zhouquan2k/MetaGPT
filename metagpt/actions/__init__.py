@@ -5,9 +5,8 @@
 @Author  : alexanderwu
 @File    : __init__.py
 """
-from enum import Enum
 
-from metagpt.actions.action import Action
+from metagpt.actions.action import Action, PromptType
 from metagpt.actions.action_output import ActionOutput
 from metagpt.actions.add_requirement import BossRequirement
 from metagpt.actions.debug_error import DebugError
@@ -23,6 +22,7 @@ from metagpt.actions.write_code_review import WriteCodeReview
 from metagpt.actions.write_prd import WritePRD
 from metagpt.actions.write_prd_review import WritePRDReview
 from metagpt.actions.write_test import WriteTest
+from enum import Enum
 
 
 class ActionType(Enum):
