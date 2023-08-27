@@ -19,6 +19,10 @@ from metagpt.actions.action import USER_PROMPT
 from metagpt.schema import Task
 from metagpt.actions import PromptType
 
+DEPENDENCY_PROMPT = """
+TODO
+"""
+
 TASK_PROMPT = """
 # Origin Version
 {content}
@@ -39,7 +43,7 @@ Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD W
 
 PROMPT_TEMPLATE = """
 # Context
-{context}
+{source}
 
 ## Format example
 {format_example}
@@ -101,6 +105,7 @@ sequenceDiagram
 The requirement is clear to me.
 ---
 """
+
 OUTPUT_MAPPING = {
     "Implementation approach": {'python_type': (str, ...), 'type': 'text'},
     "Python package name": {'python_type': (str, ...), 'type': 'python'},
@@ -111,16 +116,17 @@ OUTPUT_MAPPING = {
 }
 
 
-
-
 class WriteDesign(Action):
     def __init__(self, name, context=None, llm=None):
         super().__init__(name, context, llm)
         self.desc = "Based on the PRD, think about the system design, and design the corresponding APIs, " \
                     "data structures, library tables, processes, and paths. Please provide your design, feedback " \
                     "clearly and in detail."
+        self.dest_artifact_type = ArtifactType.DESIGN
         self._output_mapping = OUTPUT_MAPPING
         self._output_cls_name = "system_design"
+        self.DEPENDENCY_CREATE_PROMPT = PROMPT_TEMPLATE
+        self.FORMAT_EXAMPLE = FORMAT_EXAMPLE
 
     def recreate_workspace(self, workspace: Path):
         try:
@@ -172,10 +178,3 @@ class WriteDesign(Action):
         system_design = await self._aask_v1(prompt, "system_design", OUTPUT_MAPPING, simulate=simulate_content)
         self._save(context, system_design)
         return system_design
-
-    def _get_prompt(self, prompt_type: PromptType, task: Task = None, comment: str = None):
-        if prompt_type == PromptType.Task:
-            return TASK_PROMPT.format(content=task.artifact.content, description=task.description, format_example=FORMAT_EXAMPLE)
-        elif prompt_type == PromptType.Comment:
-            return comment
-

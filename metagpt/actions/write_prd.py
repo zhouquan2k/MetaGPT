@@ -7,7 +7,8 @@
 """
 from typing import List, Tuple
 
-from metagpt.actions import Action, ActionOutput
+from metagpt.actions import Action, ActionOutput, PromptType
+from metagpt.schema import Task
 from metagpt.actions.search_and_summarize import SearchAndSummarize
 from metagpt.logs import logger
 from metagpt.artifact import Artifact, ArtifactType
@@ -16,10 +17,7 @@ from metagpt.actions.action import USER_PROMPT
 PROMPT_TEMPLATE = """
 # Context
 ## Original Requirements
-{requirements}
-
-## Search Information
-{search_information}
+{source}
 
 ## Format example
 {format_example}
@@ -42,6 +40,7 @@ ATTENTION: Use '##' to SPLIT SECTIONS, not '#'. AND '## <SECTION_NAME>' SHOULD W
 
 ## Anything UNCLEAR: Provide as Plain text. Make clear here.
 """
+
 FORMAT_EXAMPLE = """
 ---
 ## Original Requirements
@@ -79,21 +78,70 @@ There are no unclear points.
 ---
 """
 OUTPUT_MAPPING = {
-    "Original Requirements": (str, ...),
-    "Product Goals": (List[str], ...),
-    "User Stories": (List[str], ...),
+    "Original Requirements": {'python_type': (str, ...), 'type': 'text'},
+    "Product Goals": {'python_type': (List[str], ...), 'type': 'python'},
+    "User Stories": {'python_type': (List[str], ...), 'type': 'python'},
     # "Competitive Analysis": (List[str], ...),
     # "Competitive Quadrant Chart": (str, ...),
-    "Requirement Analysis": (str, ...),
-    "Requirement Pool": (List[Tuple[str, str]], ...),
-    "UI Design draft":(str, ...),
-    "Anything UNCLEAR": (str, ...),
+    "Requirement Analysis": {'python_type': (str, ...), 'type': 'text'},
+    "Requirement Pool": {'python_type': (List[Tuple[str, str]], ...), 'type': 'python'},
+    "UI Design draft": {'python_type': (str, ...), 'type': 'text'},
+    "Anything UNCLEAR": {'python_type':(str, ...), 'type': 'text'}
 }
+
+
+TASK_UPDATE_PROMPT = '''
+# Origin Version
+{content}
+
+# Comments
+{description}
+
+# Format example
+{format_example}
+
+-----
+Role: You are a professional product manager; the goal is to design a concise, usable, efficient product
+Requirement: The content below 'Origin Version' section is the design you previously given. now We gave some comments in 'Comments' section.  
+please revise the sections as required by these comments, you can only output sections that modified.
+ATTENTION: Use '##' to SPLIT SECTIONS, not '#'. AND '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote. Output carefully referenced "Format example" in format.
+
+## Original Requirements: Provide as Plain text, place the polished complete original requirements here
+
+## Product Goals: Provided as Python list[str], up to 3 clear, orthogonal product goals. If the requirement itself is simple, the goal should also be simple
+
+## User Stories: Provided as Python list[str], up to 5 scenario-based user stories, If the requirement itself is simple, the user stories should also be less
+
+## Requirement Analysis: Provide as Plain text. Be simple. LESS IS MORE. Make your requirements less dumb. Delete the parts unnessasery.
+
+## Requirement Pool: Provided as Python list[str, str], the parameters are requirement description, priority(P0/P1/P2), respectively, comply with PEP standards; no more than 5 requirements and consider to make its difficulty lower
+
+## UI Design draft: Provide as Plain text. Be simple. Describe the elements and functions, also provide a simple style description and layout description.
+
+## Anything UNCLEAR: Provide as Plain text. Make clear here.
+'''
+
+TASK_CREATE_PROMPT = '''
+TODO
+'''
+
+DEPENDENCY_CREATE_PROMPT = PROMPT_TEMPLATE
+
+DEPENDENCY_UPDATE_PROMPT='''
+TODO
+'''
 
 
 class WritePRD(Action):
     def __init__(self, name="", context=None, llm=None):
         super().__init__(name, context, llm)
+        self.dest_artifact_type = ArtifactType.PRD
+        self.DEPENDENCY_CREATE_PROMPT = DEPENDENCY_CREATE_PROMPT
+        self.DEPENDENCY_UPDATE_PROMPT = DEPENDENCY_UPDATE_PROMPT
+        self.TASK_UPDATE_PROMPT = TASK_UPDATE_PROMPT
+        self.FORMAT_EXAMPLE = FORMAT_EXAMPLE
+        self._output_mapping = OUTPUT_MAPPING
+        self._output_cls_name = "prd"
 
     async def run(self, requirements, simulate=False, prompt=None, *args, **kwargs) -> ActionOutput:
         sas = SearchAndSummarize()

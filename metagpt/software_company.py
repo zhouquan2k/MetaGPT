@@ -24,6 +24,12 @@ ArtifactTypeToAction = {
     ArtifactType.DESIGN: ActionType.WRITE_DESIGN
 }
 
+ArtifactTypeDependency = {
+    ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_PRD],
+    ArtifactType.PRD: [ActionType.WRITE_DESIGN],
+    ArtifactType.DESIGN: [ActionType.WRITE_TASKS]
+}
+
 
 class SoftwareCompany(BaseModel):
     """
@@ -78,30 +84,59 @@ class SoftwareCompany(BaseModel):
         }
         return Message(content=prompt if prompt else artifact.content, cause_by=type_action_map[artifact.type].value)
 
+    # TODO
     def load_artifact(self, artifact_path):
         return Artifact.load(self.environment.workspace, artifact_path)
 
-    async def add_project_task(self, task: Task) -> RoleContext:
+    def add_project_task(self, task: Task):
+        if not task.action:
+            task.action = ArtifactTypeToAction[task.artifact.type]
+        self.environment.task_queue.append(task)
+
+    async def execute_next_task(self) -> RoleContext:
+        self._process_events()
+        if len(self.environment.task_queue) == 0:
+            return None
+        task = self.environment.task_queue.pop(0)
         # find role/action to process task
-        action_cls = ArtifactTypeToAction[task.artifact.type].value
         context = RoleContext()
         context.env = self.environment
         llm = LLM()
-        action = action_cls(f'{task.artifact.type}_{task.artifact.name}', context=context, llm=llm)
+        action = task.action.value(f'{task.artifact.type}_{task.artifact.name}', context=context, llm=llm)
         output = await action.process_task(task)
         logger.info(output)
         return context
 
-    async def process_next_event(self):
-        # pick one event from queue
-        # find role/action to process event
-        # action.process_event(event)
+    def _process_events(self):
         event = self.environment.get_next_event()
-        if event:
+        llm = LLM()
+        while event:
+            actions = ArtifactTypeDependency[event.artifact.type]
+            if len(actions) > 0:
+                # TODO  to get the singleton of action , not create a new one
+                for _action in actions:
+                    # TODO get destination artifact, and put it in task, according to artifact dependency
+                    context = RoleContext()
+                    context.env = self.environment
+                    action = _action.value('TODO', context=context, llm=llm)
+                    if not action.multiple_artifacts:  # one to one
+                        impact_artifacts = event.artifact.impact_artifacts.get(_action, [])
+                        count = len(impact_artifacts)
+                        dest_artifact = None
+                        if count == 0:  # new
+                            # TODO action override
+                            dest_artifact = self.environment.artifact_mgr.create_artifact(action.dest_artifact_type, event.artifact.name, path=event.artifact.path)
+                            event.artifact.add_watch(dest_artifact)
+                        elif count == 1:
+                            dest_artifact = impact_artifacts[0]
+                        else:
+                            raise Exception('impact artifacts > 1 for single artifact action?')
+                        self.environment.task_queue.append(
+                            Task(source_artifact=event.artifact, action=_action, artifact=dest_artifact))
+                    else:  # one to many
+                        raise NotImplementedError()
 
-
-
-
+            event = self.environment.get_next_event()
 
     def _save(self):
         logger.info(self.json())

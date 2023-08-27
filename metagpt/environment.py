@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field
 
 from metagpt.memory import Memory
 from metagpt.roles import Role
-from metagpt.schema import Message, Event
-from metagpt.artifact.workspace import Workspace
+from metagpt.schema import Message, Event, Task
+from metagpt.artifact import Workspace, ArtifactMgr
 from metagpt.config import CONFIG
 
 
@@ -29,14 +29,21 @@ class Environment(BaseModel):
     workspace: Workspace = None
     single_step: bool = False
 
+    task_queue: list[Task] = []
     event_queue: list[Event] = []
+    artifact_mgr: ArtifactMgr = None
 
 
     class Config:
         arbitrary_types_allowed = True
 
     def init(self, project_name):
-        self.workspace = Workspace(project_name, CONFIG.workspace_root_path)
+        self.workspace = Workspace.init_workspace(project_name, CONFIG.workspace_root_path)
+        path = self.workspace.rootPath / 'artifacts.json'
+        if path.exists():
+            self.artifact_mgr = ArtifactMgr.parse_raw(path.read_text())
+        else:
+            self.artifact_mgr = ArtifactMgr(workspace=self.workspace)
 
     def add_role(self, role: Role):
         """增加一个在当前环境的角色
@@ -93,5 +100,5 @@ class Environment(BaseModel):
     def publish_event(self, event: Event):
         self.event_queue.append(event)
 
-    def get_next_event(self):
+    def get_next_event(self) -> Event:
         return self.event_queue.pop(0) if len(self.event_queue) > 0 else None

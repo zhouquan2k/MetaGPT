@@ -1,11 +1,15 @@
 from pathlib import Path
 import os
+from pydantic import BaseModel
 
 
-class Workspace:
-    def __init__(self, name: str, root_path: str):
-        self.name: str = name
-        self.rootPath: Path = Path(root_path) / name
-        os.makedirs(self.rootPath, exist_ok=True)
-        # self.docs_path: Path = Path(root_path) / name / 'doc'
+class Workspace(BaseModel):
+    name: str
+    rootPath: Path = None
 
+    @staticmethod
+    def init_workspace(name: str, root_path: str) -> 'Workspace':
+        workspace = Workspace(name=name)
+        workspace.rootPath = Path(root_path) / name
+        os.makedirs(workspace.rootPath, exist_ok=True)
+        return workspace

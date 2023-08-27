@@ -16,9 +16,8 @@ from metagpt.llm import LLM
 from metagpt.utils.common import OutputParser
 from metagpt.schema import Task, Event
 from metagpt.logs import logger
-from metagpt.artifact import Artifact
+from metagpt.artifact import Artifact, ArtifactType
 from enum import Enum
-
 
 USER_PROMPT = '''
 {user_prompt} 
@@ -28,13 +27,17 @@ REMEMBER: Always output the full PRD even when part of it need to be modified.
 
 
 class PromptType(Enum):
-    Task = "task"
+    Default = "default"
     Comment = "comment"
+    Task_Update = "task_update"
+    Task_Create = "task_create"
+    Dependency_Update = "dependency_update"
+    Dependency_Create = "dependency_create"
 
 
 class Action(ABC):
     def __init__(self, name: str = '', context=None, llm: LLM = None):
-        self.name: str = name
+        self.name: str = name  # TODO action name?
         if llm is None:
             llm = LLM()
         self.llm = llm
@@ -46,6 +49,13 @@ class Action(ABC):
         self.instruct_content = None
         self._output_mapping = None
         self._output_cls_name = None
+        self.multiple_artifacts = False
+        self.dest_artifact_type: ArtifactType = None
+        self.TASK_CREATE_PROMPT: str = 'TODO'
+        self.TASK_UPDATE_PROMPT: str = 'TODO'
+        self.DEPENDENCY_CREATE_PROMPT: str = 'TODO'
+        self.DEPENDENCY_UPDATE_PROMPT: str = 'TODO'
+        self.FORMAT_EXAMPLE: str = 'TODO'
 
     def set_prefix(self, prefix, profile):
         """Set prefix for later usage"""
@@ -91,7 +101,8 @@ class Action(ABC):
         instruct_content = output_class(**parsed_data)
         return ActionOutput(content, instruct_content)
 
-    async def _aask_v2(self, prompt, simulate_name: str = None, simulate: bool = False, system_msgs: Optional[list[str]] = None) -> str:
+    async def _aask_v2(self, prompt, simulate_name: str = None, simulate: bool = False,
+                       system_msgs: Optional[list[str]] = None) -> str:
         if not system_msgs:
             system_msgs = []
         system_msgs.append(self.prefix)
@@ -113,9 +124,11 @@ class Action(ABC):
     def _parse_result(self, content: str, artifact: Artifact):
         logger.debug(content)
         output_class = ActionOutput.create_model_class(self._output_cls_name, self._output_mapping)
-        parsed_old_data = OutputParser.parse_data_with_mapping(artifact.new_content(), self._output_mapping)
+        parsed_old_data = OutputParser.parse_data_with_mapping(artifact.new_content(), self._output_mapping) if artifact.content else {}
         parsed_data = OutputParser.parse_data_with_mapping(content, self._output_mapping)
         combined_data = parsed_old_data | parsed_data
+        artifact.changes = artifact.changes | parsed_data
+        artifact.changes_text = self._parsed_to_str(artifact.changes)
 
         logger.debug(json.dumps(parsed_data, indent=4))
         artifact.instruct_content = output_class(**combined_data)
@@ -142,33 +155,49 @@ class Action(ABC):
         raise NotImplementedError("The run method should be implemented in a subclass.")
 
     # @abstractmethod
-    async def _get_prompt(self, prompt_type: PromptType, **vargs) -> str:
-        return ''
+    def _get_prompt(self, task: Task, prompt_type: PromptType = PromptType.Default, comment: str = None) -> (str, PromptType):
+        if prompt_type == PromptType.Comment:
+            return comment, PromptType.Comment
+        else:
+            if not task.source_artifact:
+                prompt = self.TASK_UPDATE_PROMPT if task.artifact.content else self.TASK_CREATE_PROMPT
+                return prompt.format(content=task.artifact.content, description=task.description,
+                                     format_example=self.FORMAT_EXAMPLE), PromptType.Task_Update if task.artifact.content else PromptType.Task_Create
+            else:
+                if not task.artifact.content:
+                    return self.DEPENDENCY_CREATE_PROMPT.format(source=task.source_artifact.content,
+                                                                format_example=self.FORMAT_EXAMPLE), PromptType.Dependency_Create
+                else:
+                    return self.DEPENDENCY_UPDATE_PROMPT.format(source=task.source_artifact.previous_content,
+                                                                changes=task.source_artifact.changes_text,
+                                                                dest=task.artifact.content,
+                                                                format_example=self.FORMAT_EXAMPLE), PromptType.Dependency_Update
 
     async def process_task(self, task: Task) -> str:
         self.context.todo = self
         self.context.task = task
         self.context.artifact = task.artifact
-        task.artifact.load(self.context.env.workspace)
-        if task.description:
-            prompt = self._get_prompt(PromptType.Task, task=task)
-            result = await self._aask_v2(prompt, simulate=True, simulate_name=f'{task.artifact.type.value}_{task.artifact.name}')
+        prompt, prompt_type = self._get_prompt(task)
+        if prompt:
+            result = await self._aask_v2(prompt, simulate=True,
+                                         simulate_name=f'{task.artifact.type.value}_{prompt_type.value}_{task.artifact.name}')
             return self._parse_result(result, task.artifact)
-        else:
+        else:  # use artifact content directly
+            if task.description and not task.artifact.content:
+                task.artifact.content = task.description
+            if not task.artifact.content:
+                raise Exception('RAW_REQUIREMENT artifact must exist with content')
             return task.artifact.content
 
     async def comment(self, comment) -> str:
-        prompt = self._get_prompt(PromptType.Comment, comment=comment)
+        prompt = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
         result = await self._aask_v2(prompt)
         return self._parse_result(result, self.context.artifact)
 
     def commit(self):
         artifact = self.context.artifact
-        artifact.save(self.context.env.workspace)
+        artifact.save()
         self.context.task = None
         self.context.todo = None
         self.context.artifact = None
         self.context.env.publish_event(Event(artifact=artifact))
-
-
-

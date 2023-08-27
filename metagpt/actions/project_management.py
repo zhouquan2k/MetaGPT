@@ -7,10 +7,49 @@
 """
 from typing import List, Tuple
 
-from metagpt.actions.action import Action
+from metagpt.actions.action import Action, PromptType
 from metagpt.const import WORKSPACE_ROOT
 from metagpt.utils.common import CodeParser
 from metagpt.artifact import Artifact, ArtifactType
+from metagpt.schema import Task
+
+TASK_PROMPT = '''
+TODO
+'''
+
+DEPENDENCY_PROMPT = '''
+# Old Version Design
+{old_version_source}
+
+# Changes
+{changes}
+
+# Old Version Task
+{old_version}
+
+# Format example
+{format_example}
+
+Role: You are a project manager; the goal is to break down tasks according to PRD/technical design, give a task list, and analyze task dependencies to start with the prerequisite modules
+Requirements: The content under "Old Version Design" is the orginal version of design. new changes had been made in "Changes" section. You must output the changes to the task list document accordingly, the origin task list document is provided under section "Old Version Task". Notice: Only changed section should be provided, you needn't provide the unmodified sections.
+Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote.
+
+## Required Python third-party packages: Provided in requirements.txt format
+
+## Required Other language third-party packages: Provided in requirements.txt format
+
+## Full API spec: Use OpenAPI 3.0. Describe all APIs that may be used by both frontend and backend.
+
+## Logic Analysis: Provided as a Python list[str, str]. the first is filename, the second is class/method/function should be implemented in this file. Analyze the dependencies between the files, which work should be done first
+
+## Task list: Provided as Python list[str]. Each str is a filename, the more at the beginning, the more it is a prerequisite dependency, should be done first
+
+## Shared Knowledge: Anything that should be public like utils' functions, config's variables details that should make clear first. 
+
+## Anything UNCLEAR: Provide as Plain text. Make clear here. For example, don't forget a main entry. don't forget to init 3rd party libs.
+
+'''
+
 
 PROMPT_TEMPLATE = '''
 # Context
@@ -122,6 +161,17 @@ class WriteTasks(Action):
         rsp = await self._aask_v1(prompt, "task", OUTPUT_MAPPING)
         self._save(context, rsp)
         return rsp
+
+    def _get_prompt(self, task: Task, prompt_type: PromptType = PromptType.Default, dest_artifact: Artifact = None, comment: str = None):
+        if prompt_type == PromptType.Comment:
+            return comment
+        else:
+            artifact = task.artifact
+            if not task.source_artifact:
+                return TASK_PROMPT.format(content=task.artifact.content, description=task.description, format_example=FORMAT_EXAMPLE)
+            else:
+                return DEPENDENCY_PROMPT.format(format_example=FORMAT_EXAMPLE, old_version_source=artifact.previous_content, changes=artifact.changes_text, old_version=dest_artifact.content)
+
 
 
 class AssignTasks(Action):

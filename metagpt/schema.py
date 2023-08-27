@@ -16,16 +16,18 @@ from metagpt.logs import logger
 from metagpt.artifact import Artifact
 
 
+
 @dataclass
 class Task:
     artifact: Artifact
-    description: str = None
+    source_artifact: Artifact = None # for event only
+    action: "ActionType" = None # for event, action is mandatory
+    description: str = None  # task description
     code: str = None
 
 @dataclass
 class Event:
     artifact: Artifact  # source artifact
-
 
 
 class RawMessage(TypedDict):
