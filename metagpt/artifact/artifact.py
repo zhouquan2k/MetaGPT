@@ -8,6 +8,7 @@ from typing import Any
 
 class ArtifactType(Enum):
     RAW_REQUIREMENT = "REQ"
+    SYSTEM_DESIGN = "SYSTEM-DESIGN"
     PRD = "PRD"
     DESIGN = "DESIGN"
     PROJECT = "PROJECT"
@@ -24,6 +25,7 @@ class Artifact(BaseModel):
     changes_text: str = ''
     changes: dict = {}
     impact_artifacts: dict = {}  # ['ActionType': list[str]]
+    depend_artifacts: dict = {}  # ['ArtifactType': str]
 
     pending_content: list[str] = []
     workspace: Workspace = None
@@ -56,6 +58,10 @@ class Artifact(BaseModel):
     def add_watch(self, artifact: 'Artifact'):
         artifacts_by_type = self.impact_artifacts.setdefault(artifact.type.value, [])
         artifacts_by_type.append(artifact.name)
+        artifact.depend_artifacts[self.type.value] = self.name
+
+    def get_dependency_by_type(self, type: ArtifactType, artifact_mgr: 'ArtifactMgr'):
+        return artifact_mgr.get(type, self.depend_artifacts[type.value])
 
 
 class ArtifactMgr(BaseModel):
@@ -77,11 +83,14 @@ class ArtifactMgr(BaseModel):
         artifacts_by_type[name] = artifact
         return artifact
 
-    def get(self, artifact_type: ArtifactType, name: str):
-        return self.byType.get(artifact_type.value, {})[name]
+    def get(self, artifact_type: ArtifactType, name: str=None):
+        by_type = self.byType.get(artifact_type.value, {})
+        return list(by_type.values())[0] if not name and len(by_type) == 1 else by_type[name]
 
     def save(self):
         self.path.write_text(self.json(indent=4))
+
+
 
 
 

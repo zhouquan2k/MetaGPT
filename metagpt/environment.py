@@ -43,7 +43,7 @@ class Environment(BaseModel):
         if path.exists():
             self.artifact_mgr = ArtifactMgr.parse_raw(path.read_text())
         else:
-            self.artifact_mgr = ArtifactMgr(workspace=self.workspace)
+            self.artifact_mgr = ArtifactMgr.create_artifact_mgr(workspace=self.workspace)
 
     def add_role(self, role: Role):
         """增加一个在当前环境的角色

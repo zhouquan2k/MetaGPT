@@ -12,7 +12,7 @@ from metagpt.config import CONFIG
 from metagpt.environment import Environment
 from metagpt.logs import logger
 from metagpt.roles import Role, RoleContext
-from metagpt.schema import Message, Task
+from metagpt.schema import Message, Task, Event
 from metagpt.utils.common import NoMoneyException
 from metagpt.artifact import Artifact, ArtifactType
 from metagpt.actions import ActionType
@@ -25,6 +25,7 @@ ArtifactTypeToAction = {
 }
 
 ArtifactTypeDependency = {
+    ArtifactType.SYSTEM_DESIGN: [ActionType.WRITE_DESIGN],
     ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_PRD],
     ArtifactType.PRD: [ActionType.WRITE_DESIGN],
     ArtifactType.DESIGN: [ActionType.WRITE_TASKS]
@@ -93,6 +94,9 @@ class SoftwareCompany(BaseModel):
             task.action = ArtifactTypeToAction[task.artifact.type]
         self.environment.task_queue.append(task)
 
+    def add_artifact_event(self, artifact: Artifact):
+        self.environment.publish_event(Event(artifact=artifact))
+
     async def execute_next_task(self) -> RoleContext:
         self._process_events()
         if len(self.environment.task_queue) == 0:
@@ -124,9 +128,7 @@ class SoftwareCompany(BaseModel):
                         count = len(impact_artifacts)
                         dest_artifact = None
                         if count == 0:  # new
-                            # TODO action override
-                            dest_artifact = self.environment.artifact_mgr.create_artifact(action.dest_artifact_type, event.artifact.name, path=event.artifact.path)
-                            event.artifact.add_watch(dest_artifact)
+                            dest_artifact = action.create_artifact(event)
                         elif count == 1:
                             dest_artifact = impact_artifacts[0]
                         else:

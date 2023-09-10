@@ -16,7 +16,6 @@ from metagpt.logs import logger
 from metagpt.artifact import Artifact
 
 
-
 @dataclass
 class Task:
     artifact: Artifact
@@ -28,6 +27,12 @@ class Task:
 @dataclass
 class Event:
     artifact: Artifact  # source artifact
+
+
+class UserStory(BaseModel):
+    User: str
+    Action: str
+    Goal: str
 
 
 class RawMessage(TypedDict):

@@ -45,7 +45,8 @@ class BaseGPTAPI(BaseChatbot):
         rsp = await self.acompletion_text(message, stream=True)
         history.append(self._user_msg(msg))
         history.append(self._assistant_msg(rsp))
-        logger.debug(message)
+        for msg in message:
+            logger.debug(msg)
         # logger.debug(rsp)
         return rsp
 

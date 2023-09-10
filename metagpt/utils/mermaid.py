@@ -31,7 +31,7 @@ def mermaid_to_file(mermaid_code, output_file_without_suffix, width=2048, height
         logger.warning("RUN `npm install -g @mermaid-js/mermaid-cli` to install mmdc")
         return -1
 
-    for suffix in ["pdf", "svg", "png"]:
+    for suffix in ["png"]:  # "pdf", "svg",
         output_file = f"{output_file_without_suffix}.{suffix}"
         # Call the `mmdc` command to convert the Mermaid code to a PNG
         logger.info(f"Generating {output_file}..")

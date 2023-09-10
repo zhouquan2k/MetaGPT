@@ -25,6 +25,13 @@ USER_PROMPT = '''
 REMEMBER: Always output the full PRD even when part of it need to be modified.   
 '''
 
+COMMENT_PROMPT = '''
+please revise according to the comment below:
+
+COMMENT: ```{comment}
+```
+'''
+
 
 class PromptType(Enum):
     Default = "default"
@@ -33,6 +40,7 @@ class PromptType(Enum):
     Task_Create = "task_create"
     Dependency_Update = "dependency_update"
     Dependency_Create = "dependency_create"
+    No_Action = "no_action"
 
 
 class Action(ABC):
@@ -117,6 +125,7 @@ class Action(ABC):
             logger.debug(prompt)
             content = await self.llm.aask(prompt, system_msgs, history=self.context.historyMessages)
             if path:
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
 
         return content
@@ -130,7 +139,7 @@ class Action(ABC):
         artifact.changes = artifact.changes | parsed_data
         artifact.changes_text = self._parsed_to_str(artifact.changes)
 
-        logger.debug(json.dumps(parsed_data, indent=4))
+        logger.debug(json.dumps(parsed_data, indent=4, ensure_ascii=False))
         artifact.instruct_content = output_class(**combined_data)
         new_content = self._parsed_to_str(combined_data)
         artifact.pending_content.append(new_content)
@@ -141,12 +150,16 @@ class Action(ABC):
         for key, value in self._output_mapping.items():
             type = value['type']
             str += f'## {key}\n'
-            if type != 'text':
+            if type == 'python':
                 str += f'```{type}\n'
-            str += f'{parsed[key]}'
-            if type != 'text':
-                str += '```\n\n'
+                str += json.dumps(parsed.get(key,{}), indent=4, ensure_ascii=False)
+                str += '\n```\n\n'
+            elif type != 'text':
+                str += f'```{type}\n'
+                str += parsed[key]
+                str += '\n```\n\n'
             else:
+                str += parsed[key]
                 str += '\n\n'
         return str
 
@@ -154,24 +167,44 @@ class Action(ABC):
         """Run action"""
         raise NotImplementedError("The run method should be implemented in a subclass.")
 
-    # @abstractmethod
-    def _get_prompt(self, task: Task, prompt_type: PromptType = PromptType.Default, comment: str = None) -> (str, PromptType):
+    def _get_prompt(self, task: Task, prompt_type: PromptType = PromptType.Default, **kwargs) -> (str, PromptType):
         if prompt_type == PromptType.Comment:
-            return comment, PromptType.Comment
+            return self._get_prompt_(PromptType.Comment, **kwargs)
         else:
-            if not task.source_artifact:
+            if not task.source_artifact:  # task: direct change
                 prompt = self.TASK_UPDATE_PROMPT if task.artifact.content else self.TASK_CREATE_PROMPT
-                return prompt.format(content=task.artifact.content, description=task.description,
-                                     format_example=self.FORMAT_EXAMPLE), PromptType.Task_Update if task.artifact.content else PromptType.Task_Create
-            else:
+                if not prompt:
+                    return None, PromptType.No_Action
+                return self._get_prompt_(PromptType.Task_Update if task.artifact.content else PromptType.Task_Create, **kwargs)
+            else:   # event: upstream change
                 if not task.artifact.content:
-                    return self.DEPENDENCY_CREATE_PROMPT.format(source=task.source_artifact.content,
-                                                                format_example=self.FORMAT_EXAMPLE), PromptType.Dependency_Create
+                    return self._get_prompt_(PromptType.Dependency_Create, **kwargs)
                 else:
-                    return self.DEPENDENCY_UPDATE_PROMPT.format(source=task.source_artifact.previous_content,
+                    return self._get_prompt_(PromptType.Dependency_Update, **kwargs)
+
+    # @abstractmethod
+    def _get_prompt_(self,  prompt_type: PromptType,  **kwargs) -> (str, PromptType):
+        task = self.context.task
+        if prompt_type == PromptType.Comment:
+            return COMMENT_PROMPT.format(comment=kwargs['comment']), PromptType.Comment
+        elif prompt_type == PromptType.Task_Update:
+            prompt = self.TASK_UPDATE_PROMPT.format(content=task.artifact.content, description=task.description,
+                                     format_example=self.FORMAT_EXAMPLE) if self.TASK_UPDATE_PROMPT else None
+            return prompt, prompt_type if prompt else PromptType.No_Action
+        elif prompt_type == PromptType.Task_Create:
+            prompt = self.TASK_CREATE_PROMPT.format(content=task.artifact.content, description=task.description,
+                                                    format_example=self.FORMAT_EXAMPLE) if self.TASK_CREATE_PROMPT else None
+            return prompt, prompt_type if prompt else PromptType.No_Action
+        elif prompt_type == PromptType.Dependency_Create:
+            return self.DEPENDENCY_CREATE_PROMPT.format(source=task.source_artifact.content,
+                                                 format_example=self.FORMAT_EXAMPLE,
+                                                 **kwargs), PromptType.Dependency_Create
+        elif prompt_type == PromptType.Dependency_Update:
+            return self.DEPENDENCY_UPDATE_PROMPT.format(source=task.source_artifact.previous_content,
                                                                 changes=task.source_artifact.changes_text,
                                                                 dest=task.artifact.content,
                                                                 format_example=self.FORMAT_EXAMPLE), PromptType.Dependency_Update
+
 
     async def process_task(self, task: Task) -> str:
         self.context.todo = self
@@ -190,7 +223,7 @@ class Action(ABC):
             return task.artifact.content
 
     async def comment(self, comment) -> str:
-        prompt = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
+        prompt, type = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
         result = await self._aask_v2(prompt)
         return self._parse_result(result, self.context.artifact)
 
@@ -200,4 +233,11 @@ class Action(ABC):
         self.context.task = None
         self.context.todo = None
         self.context.artifact = None
+        self.context.historyMessages = []
         self.context.env.publish_event(Event(artifact=artifact))
+        return artifact
+
+    def create_artifact(self, event):
+        artifact = self.context.env.artifact_mgr.create_artifact(self.dest_artifact_type, event.artifact.name, path=event.artifact.path)
+        event.artifact.add_watch(artifact)
+        return artifact

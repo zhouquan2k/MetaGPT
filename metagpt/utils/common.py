@@ -10,6 +10,7 @@ import contextlib
 import inspect
 import os
 import re
+import json
 from typing import List, Tuple
 
 from metagpt.logs import logger
@@ -50,10 +51,14 @@ class OutputParser:
 
     @classmethod
     def parse_code(cls, text: str, lang: str = "") -> str:
-        pattern = rf'```{lang}.*?\s+(.*?)```'
+        pattern = rf'```(\w+).*?\s+(.*?)```'
         match = re.search(pattern, text, re.DOTALL)
         if match:
-            code = match.group(1)
+            lang = match.group(1)
+            if lang == 'python':
+                code = json.loads(match.group(2))
+            else:
+                code = match.group(2)
         else:
             raise Exception
         return code

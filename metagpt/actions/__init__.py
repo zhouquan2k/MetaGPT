@@ -10,7 +10,7 @@ from metagpt.actions.action import Action, PromptType
 from metagpt.actions.action_output import ActionOutput
 from metagpt.actions.add_requirement import BossRequirement
 from metagpt.actions.debug_error import DebugError
-from metagpt.actions.design_api import WriteDesign
+from metagpt.my_actions.design import WriteDesign
 from metagpt.actions.design_api_review import DesignReview
 from metagpt.actions.design_filenames import DesignFilenames
 from metagpt.actions.project_management import AssignTasks, WriteTasks
@@ -19,7 +19,7 @@ from metagpt.actions.run_code import RunCode
 from metagpt.actions.search_and_summarize import SearchAndSummarize
 from metagpt.actions.write_code import WriteCode
 from metagpt.actions.write_code_review import WriteCodeReview
-from metagpt.actions.write_prd import WritePRD
+from metagpt.my_actions.write_prd import WritePRD
 from metagpt.actions.write_prd_review import WritePRDReview
 from metagpt.actions.write_test import WriteTest
 from enum import Enum
@@ -34,7 +34,7 @@ class ActionType(Enum):
     WRITE_DESIGN = WriteDesign
     DESIGN_REVIEW = DesignReview
     DESIGN_FILENAMES = DesignFilenames
-    WRTIE_CODE = WriteCode
+    WRITE_CODE = WriteCode
     WRITE_CODE_REVIEW = WriteCodeReview
     WRITE_TEST = WriteTest
     RUN_CODE = RunCode
