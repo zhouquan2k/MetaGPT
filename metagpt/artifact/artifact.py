@@ -4,6 +4,9 @@ from pathlib import Path
 from enum import Enum
 from pydantic import BaseModel
 from typing import Any
+from metagpt.actions.action_output import ActionOutput
+from metagpt.utils.common import OutputParser
+import json
 
 
 class ArtifactType(Enum):
@@ -11,7 +14,8 @@ class ArtifactType(Enum):
     SYSTEM_DESIGN = "SYSTEM-DESIGN"
     PRD = "PRD"
     DESIGN = "DESIGN"
-    PROJECT = "PROJECT"
+    PROJECT = "PROJECT"  # USELESS
+    CODE = "CODE"
 
 
 class Artifact(BaseModel):
@@ -26,6 +30,8 @@ class Artifact(BaseModel):
     changes: dict = {}
     impact_artifacts: dict = {}  # ['ActionType': list[str]]
     depend_artifacts: dict = {}  # ['ArtifactType': str]
+    sub_type: str = None
+    parse_mapping: dict = None
 
     pending_content: list[str] = []
     workspace: Workspace = None
@@ -34,17 +40,52 @@ class Artifact(BaseModel):
     def new_content(self):
         return self.pending_content[-1] if len(self.pending_content) > 0 else self.content
 
+    def parse(self, content: str):
+        if self.parse_mapping:
+            parsed_old_data = OutputParser.parse_data_with_mapping(self.new_content(),
+                                                                   self.parse_mapping) if self.content else {}
+            parsed_data = OutputParser.parse_data_with_mapping(content, self.parse_mapping)
+            combined_data = parsed_old_data | parsed_data
+            output_class = ActionOutput.create_model_class(self.type.name, self.parse_mapping)
+            self.instruct_content = output_class(**combined_data)
+            self.changes = self.changes | parsed_data
+            self.changes_text = self._parsed_to_str(self.changes)
+            logger.debug(json.dumps(parsed_data, indent=4, ensure_ascii=False))
+        self.pending_content.append(content)
+
+    def _parsed_to_str(self, parsed):
+        str = ''
+        for key, value in self.parse_mapping.items():
+            type = value['type']
+            str += f'## {key}\n'
+            if type == 'python':
+                str += f'```{type}\n'
+                str += json.dumps(parsed.get(key,{}), indent=4, ensure_ascii=False)
+                str += '\n```\n\n'
+            elif type != 'text':
+                str += f'```{type}\n'
+                str += parsed[key]
+                str += '\n```\n\n'
+            else:
+                str += parsed[key]
+                str += '\n\n'
+        return str
+
     def init(self, workspace: Workspace):
         self.workspace = workspace
         if not self.full_path:
-            self.full_path = workspace.rootPath / self.path / f'{self.type.value}_{self.name}'
+            if self.type != ArtifactType.CODE:
+                self.full_path = workspace.rootPath / self.path / f'{self.type.value}_{self.name}'
+            else:
+                self.full_path = workspace.rootPath / self.path / self.name
             self.full_path.parent.mkdir(parents=True, exist_ok=True)
         if self.full_path.exists() and not self.content:
             self._load()
+            self.parse(self.content)
 
     def save(self):
-        if not self.changes:
-            return
+        #if not self.changes:
+        #    return
         logger.info(f"Saving {self.type.name}_{self.name} to {self.full_path}")
         self.full_path.write_text(self.new_content())
         self.previous_content = self.content
@@ -55,9 +96,9 @@ class Artifact(BaseModel):
         logger.info(f"Loading from {self.full_path}")
         self.content = self.full_path.read_text()
 
-    def add_watch(self, artifact: 'Artifact'):
-        artifacts_by_type = self.impact_artifacts.setdefault(artifact.type.value, [])
-        artifacts_by_type.append(artifact.name)
+    def add_watch(self, artifact: 'Artifact', action_type: str):
+        artifacts_by_type = self.impact_artifacts.setdefault(action_type, [])
+        artifacts_by_type.append(artifact)
         artifact.depend_artifacts[self.type.value] = self.name
 
     def get_dependency_by_type(self, type: ArtifactType, artifact_mgr: 'ArtifactMgr'):
@@ -75,8 +116,8 @@ class ArtifactMgr(BaseModel):
         artifact_mgr.path = workspace.rootPath / 'artifacts.json'
         return artifact_mgr
 
-    def create_artifact(self, artifact_type: ArtifactType, name: str, path: str = ''):
-        artifact = Artifact(type=artifact_type, name=name, path=path)
+    def create_artifact(self, artifact_type: ArtifactType, name: str, path: str = '', parse_mapping: dict = None):
+        artifact = Artifact(type=artifact_type, name=name, path=path, parse_mapping=parse_mapping)
         artifact.init(self.workspace)
 
         artifacts_by_type = self.byType.setdefault(artifact_type.value, {})
@@ -88,7 +129,7 @@ class ArtifactMgr(BaseModel):
         return list(by_type.values())[0] if not name and len(by_type) == 1 else by_type[name]
 
     def save(self):
-        self.path.write_text(self.json(indent=4))
+        self.path.write_text(self.json(indent=4, ensure_ascii=False))
 
 
 

@@ -7,6 +7,8 @@
 import asyncio
 import time
 from typing import NamedTuple
+import json
+from importlib import import_module
 
 import openai
 from openai.error import APIConnectionError
@@ -147,27 +149,44 @@ class OpenAIGPTAPI(BaseGPTAPI, RateLimiter):
             openai.api_version = config.openai_api_version
         self.rpm = int(config.get("RPM", 10))
 
-    async def _achat_completion_stream(self, messages: list[dict]) -> str:
-        response = await openai.ChatCompletion.acreate(**self._cons_kwargs(messages), stream=True)
+    async def _achat_completion_stream(self, messages: list[dict], functions: list[dict]=None) -> str:
+        response = await openai.ChatCompletion.acreate(**self._cons_kwargs(messages, functions), stream=True)
 
         # create variables to collect the stream of chunks
         collected_chunks = []
         collected_messages = []
         # iterate through the stream of events
+        function_call = None
         async for chunk in response:
             collected_chunks.append(chunk)  # save the event response
             chunk_message = chunk["choices"][0]["delta"]  # extract the message
             collected_messages.append(chunk_message)  # save the message
+            if 'function_call' in chunk_message:
+                function_call_dict =  chunk_message["function_call"]
+                function_call = function_call if function_call else {"arguments": ""}
+                if "name" in function_call_dict:
+                    function_call["name"] = function_call_dict["name"]
+                if "arguments" in function_call_dict:
+                    function_call["arguments"] += function_call_dict["arguments"]
             if "content" in chunk_message:
                 print(chunk_message["content"], end="")
         print()
+        if function_call:
+            # call function
+            parameters = json.loads(function_call['arguments'])
+            module = import_module('metagpt.actions.action')
+            function = getattr(module, function_call['name'])
+            ret = function(**parameters)
+            messages.append({'role': 'assistant', 'function_call': function_call, 'content': None})
+            messages.append({'role': 'function', 'name':function_call['name'], 'content': ret})
+            return await self._achat_completion_stream(messages)
+        else:
+            full_reply_content = "".join([m.get("content", "") for m in collected_messages])
+            usage = self._calc_usage(messages, full_reply_content)
+            self._update_costs(usage)
+            return full_reply_content
 
-        full_reply_content = "".join([m.get("content", "") for m in collected_messages])
-        usage = self._calc_usage(messages, full_reply_content)
-        self._update_costs(usage)
-        return full_reply_content
-
-    def _cons_kwargs(self, messages: list[dict]) -> dict:
+    def _cons_kwargs(self, messages: list[dict], functions: list[dict]=None) -> dict:
         if CONFIG.openai_api_type == "azure":
             kwargs = {
                 "deployment_id": CONFIG.deployment_id,
@@ -186,6 +205,8 @@ class OpenAIGPTAPI(BaseGPTAPI, RateLimiter):
                 "stop": None,
                 "temperature": 0.3,
             }
+            if functions:
+                kwargs['functions'] = functions
         kwargs["timeout"] = 3
         return kwargs
 
@@ -216,10 +237,10 @@ class OpenAIGPTAPI(BaseGPTAPI, RateLimiter):
         retry=retry_if_exception_type(APIConnectionError),
         retry_error_callback=log_and_reraise,
     )
-    async def acompletion_text(self, messages: list[dict], stream=False) -> str:
+    async def acompletion_text(self, messages: list[dict], stream=False, functions: list[dict]=None) -> str:
         """when streaming, print each token in place."""
         if stream:
-            return await self._achat_completion_stream(messages)
+            return await self._achat_completion_stream(messages, functions=functions)
         rsp = await self._achat_completion(messages)
         return self.get_choice_text(rsp)
 

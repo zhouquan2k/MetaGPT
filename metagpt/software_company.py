@@ -28,7 +28,7 @@ ArtifactTypeDependency = {
     ArtifactType.SYSTEM_DESIGN: [ActionType.WRITE_DESIGN],
     ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_PRD],
     ArtifactType.PRD: [ActionType.WRITE_DESIGN],
-    ArtifactType.DESIGN: [ActionType.WRITE_TASKS]
+    ArtifactType.DESIGN: [ActionType.WRITE_CODE]
 }
 
 
@@ -106,37 +106,46 @@ class SoftwareCompany(BaseModel):
         context = RoleContext()
         context.env = self.environment
         llm = LLM()
-        action = task.action.value(f'{task.artifact.type}_{task.artifact.name}', context=context, llm=llm)
+        action = task.action.value('TODO', context=context, llm=llm)
+        action.type = task.action
         output = await action.process_task(task)
         logger.info(output)
         return context
+
+    async def execute_remain_tasks(self):
+        while True:
+            context = await self.execute_next_task()
+            if context:
+                context.commit()
+            else:
+                break
+
 
     def _process_events(self):
         event = self.environment.get_next_event()
         llm = LLM()
         while event:
-            actions = ArtifactTypeDependency[event.artifact.type]
+            actions = ArtifactTypeDependency.get(event.artifact.type, [])
             if len(actions) > 0:
                 # TODO  to get the singleton of action , not create a new one
                 for _action in actions:
                     # TODO get destination artifact, and put it in task, according to artifact dependency
                     context = RoleContext()
                     context.env = self.environment
-                    action = _action.value('TODO', context=context, llm=llm)
-                    if not action.multiple_artifacts:  # one to one
-                        impact_artifacts = event.artifact.impact_artifacts.get(_action, [])
-                        count = len(impact_artifacts)
-                        dest_artifact = None
-                        if count == 0:  # new
-                            dest_artifact = action.create_artifact(event)
-                        elif count == 1:
-                            dest_artifact = impact_artifacts[0]
-                        else:
-                            raise Exception('impact artifacts > 1 for single artifact action?')
-                        self.environment.task_queue.append(
-                            Task(source_artifact=event.artifact, action=_action, artifact=dest_artifact))
-                    else:  # one to many
-                        raise NotImplementedError()
+                    action = _action.value('TODO', context=context, llm=llm, type=_action)
+                    action.create_artifacts(event)
+
+                    # if not action.multiple_artifacts:  # one to one
+                    impact_artifacts = event.artifact.impact_artifacts.get(_action.name, [])
+                    if len(impact_artifacts) == 0:
+                        self.environment.task_queue.append(Task(source_artifact=event.artifact, action=_action))
+                    else:
+                        for artifact in impact_artifacts:
+                            self.environment.task_queue.append(
+                            Task(source_artifact=event.artifact, action=_action, artifact=artifact))
+
+                    #else:  # one to many
+                    #    raise NotImplementedError()
 
             event = self.environment.get_next_event()
 

@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 from typing import List
 
-from metagpt.actions import Action, ActionOutput
+from metagpt.actions.action import Action, ActionOutput
 from metagpt.const import WORKSPACE_ROOT
 from metagpt.logs import logger
 from metagpt.utils.common import CodeParser
@@ -18,6 +18,7 @@ from metagpt.artifact.artifact import Artifact, ArtifactType
 from metagpt.actions.action import USER_PROMPT
 from metagpt.schema import Task
 from metagpt.actions import PromptType
+from pydantic import BaseModel
 
 DEPENDENCY_PROMPT = """
 TODO
@@ -61,7 +62,11 @@ Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD W
 
 ## Package name: Provide as Python str with python triple quoto, concise and clear, characters only use a combination of all lowercase and underscores
 
-## File list: Provided as Python list[str], the list of ONLY REQUIRED files needed to write the program(LESS IS MORE!). Only need relative paths under the packege name above.
+## File list: the list of ONLY REQUIRED files needed to write the program(LESS IS MORE!). You must design according to the relevant content in the System Design.  We also need to generate frontent end files under /frontend.
+Provided as list of json objects including following members:
+- path: file relative paths under the packege name above and file name 
+- type: file type, for backend files, must be one of the values ['Service', 'ServiceImpl', 'DataObject', 'DomainObject', 'Repository', 'Vue', 'js']
+- descripton: a section describing what contents should be placed in this file."
 
 ## Data structures and interface definitions: Use mermaid classDiagram code syntax, including classes and functions (with type annotations), CLEARLY MARK the RELATIONSHIPS between classes. The data structures SHOULD BE VERY DETAILED and the API should be comprehensive with a complete design. 
 
@@ -85,7 +90,22 @@ FORMAT_EXAMPLE = """
 ## File list
 ```python
 [
-    "main.java",
+    {
+        "path": "/api/AccountService.java",
+        "type": "Service",
+        "description": "put account operations prototype in this api interface"
+    },
+    {
+        "path": "/api/Account.java",
+        "type": "DataObject",
+        "description": "Account data object used by api interface"
+    },
+    {
+        "path": "/model/AccountServiceImpl.java",
+        "type": "ServiceImpl",
+        "description": "account service implemtations. ..."
+    }
+    ...
 ]
 ```
 
@@ -112,10 +132,17 @@ The requirement is clear to me.
 ---
 """
 
+
+class CodeArtifact(BaseModel):
+    path: str
+    type: str
+    description: str
+
+
 OUTPUT_MAPPING = {
     "Implementation approach": {'python_type': (str, ...), 'type': 'text'},
     "Package name": {'python_type': (str, ...), 'type': 'python'},
-    "File list": {'python_type': (List[str], ...), 'type': 'python'},
+    "File list": {'python_type': (List[CodeArtifact], ...), 'type': 'python'},
     "Data structures and interface definitions": {'python_type': (str, ...), 'type': 'mermaid'},
     "Program call flow":  {'python_type': (str, ...), 'type': 'mermaid'},
     "Anything UNCLEAR": {'python_type': (str, ...), 'type': 'text'}
@@ -182,20 +209,26 @@ class WriteDesign(Action):
         self._save_prd(docs_path, resources_path, context[-1].content)
         self._save_system_design(docs_path, resources_path, content)
 
-    def commit(self):
-        artifact = super().commit()
+    def create_artifacts(self, event):  # means a task indicating an upstream artifact change, how to generate/change downstream artifacts by this action
+        artifacts = super().create_artifacts(event)
+        artifact = artifacts[0]
+        system_design = self.context.env.artifact_mgr.get(ArtifactType.SYSTEM_DESIGN)
+        artifact.depend_artifacts[ArtifactType.SYSTEM_DESIGN.value] = system_design.name
+        return artifacts
+
+    def postprocess(self):
+        # generate new task to generate code
+        # TODO refactor to Code action.create_artifacts
+        artifact = self.context.artifact
         content = artifact.content
         resources_path = self.context.env.workspace.rootPath / 'docs'
         data_api_design = CodeParser.parse_code(block="Data structures and interface definitions", text=content)
         seq_flow = CodeParser.parse_code(block="Program call flow", text=content)
-        mermaid_to_file(data_api_design, resources_path / 'data_api_design')
-        mermaid_to_file(seq_flow, resources_path / 'seq_flow')
-
-    def create_artifact(self, event):
-        artifact = super().create_artifact(event)
-        system_design = self.context.env.artifact_mgr.get(ArtifactType.SYSTEM_DESIGN)
-        artifact.depend_artifacts[ArtifactType.SYSTEM_DESIGN.value]=system_design.name
-        return artifact
-
-
-
+        try:
+            mermaid_to_file(data_api_design, resources_path / 'data_api_design')
+        except:
+            pass
+        try:
+            mermaid_to_file(seq_flow, resources_path / 'seq_flow')
+        except:
+            pass

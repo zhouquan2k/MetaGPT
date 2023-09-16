@@ -17,7 +17,7 @@ from metagpt.actions.project_management import AssignTasks, WriteTasks
 from metagpt.actions.research import CollectLinks, WebBrowseAndSummarize, ConductResearch
 from metagpt.actions.run_code import RunCode
 from metagpt.actions.search_and_summarize import SearchAndSummarize
-from metagpt.actions.write_code import WriteCode
+from metagpt.my_actions.write_code import WriteCode
 from metagpt.actions.write_code_review import WriteCodeReview
 from metagpt.my_actions.write_prd import WritePRD
 from metagpt.actions.write_prd_review import WritePRDReview

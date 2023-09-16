@@ -18,21 +18,16 @@ from metagpt.artifact import Artifact
 
 @dataclass
 class Task:
-    artifact: Artifact
-    source_artifact: Artifact = None # for event only
-    action: "ActionType" = None # for event, action is mandatory
+    artifact: Artifact = None  # not created yet
+    source_artifact: Artifact = None  # for event only
+    action: "ActionType" = None  # for event, action is mandatory
     description: str = None  # task description
     code: str = None
+
 
 @dataclass
 class Event:
     artifact: Artifact  # source artifact
-
-
-class UserStory(BaseModel):
-    User: str
-    Action: str
-    Goal: str
 
 
 class RawMessage(TypedDict):

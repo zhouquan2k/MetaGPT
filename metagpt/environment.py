@@ -40,10 +40,11 @@ class Environment(BaseModel):
     def init(self, project_name):
         self.workspace = Workspace.init_workspace(project_name, CONFIG.workspace_root_path)
         path = self.workspace.rootPath / 'artifacts.json'
-        if path.exists():
-            self.artifact_mgr = ArtifactMgr.parse_raw(path.read_text())
-        else:
-            self.artifact_mgr = ArtifactMgr.create_artifact_mgr(workspace=self.workspace)
+        # TODO
+        #if path.exists():
+        #    self.artifact_mgr = ArtifactMgr.parse_raw(path.read_text())
+        #else:
+        self.artifact_mgr = ArtifactMgr.create_artifact_mgr(workspace=self.workspace)
 
     def add_role(self, role: Role):
         """增加一个在当前环境的角色

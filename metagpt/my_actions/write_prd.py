@@ -13,7 +13,7 @@ from metagpt.actions.search_and_summarize import SearchAndSummarize
 from metagpt.logs import logger
 from metagpt.artifact import Artifact, ArtifactType
 from metagpt.actions.action import USER_PROMPT
-from metagpt.schema import UserStory
+from pydantic import BaseModel
 
 PROMPT_TEMPLATE = """
 # Context
@@ -86,6 +86,14 @@ FORMAT_EXAMPLE = """
 ...
 ---
 """
+
+
+class UserStory(BaseModel):
+    User: str
+    Action: str
+    Goal: str
+
+
 OUTPUT_MAPPING = {
     "原始需求": {'python_type': (str, ...), 'type': 'text'},
     "用户故事": {'python_type': (UserStory, ...), 'type': 'python'},
@@ -138,8 +146,8 @@ TODO
 
 
 class WritePRD(Action):
-    def __init__(self, name="", context=None, llm=None):
-        super().__init__(name, context, llm)
+    def __init__(self, name="", context=None, llm=None, type=None):
+        super().__init__(name, context, llm, type=type)
         self.dest_artifact_type = ArtifactType.PRD
         self.DEPENDENCY_CREATE_PROMPT = DEPENDENCY_CREATE_PROMPT
         self.DEPENDENCY_UPDATE_PROMPT = DEPENDENCY_UPDATE_PROMPT
