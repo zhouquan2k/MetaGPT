@@ -86,10 +86,13 @@ class Action(ABC):
         self._output_cls_name = None
         # self.multiple_artifacts = False
         self.dest_artifact_type: ArtifactType = None
-        self.TASK_CREATE_PROMPT: str = 'TODO'
+        # self.TASK_CREATE_PROMPT: str = 'TODO'  # not used
+        self.INPUT_PROMPT: str = 'TODO'
         self.TASK_UPDATE_PROMPT: str = 'TODO'
-        self.DEPENDENCY_CREATE_PROMPT: str = 'TODO'
+
+        self.DEPENDENCY_UPDATE_INPUT_PROMPT: str = 'TODO'
         self.DEPENDENCY_UPDATE_PROMPT: str = 'TODO'
+        self.DEPENDENCY_CREATE_PROMPT: str = 'TODO'
         self.FORMAT_EXAMPLE: str = 'TODO'
 
     def set_prefix(self, prefix, profile):
@@ -151,8 +154,7 @@ class Action(ABC):
             logger.debug(system_msgs)
             logger.debug(prompt)
             content = await self.llm.aask(prompt, system_msgs, history=self.context.historyMessages, functions=functions)
-            # TODO to check if it's a function calling
-
+            # to persist for simulate
             if path:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
@@ -167,9 +169,6 @@ class Action(ABC):
             return self._get_prompt_(PromptType.Comment, **kwargs)
         else:
             if not task.source_artifact:  # task: direct change
-                prompt = self.TASK_UPDATE_PROMPT if task.artifact.content else self.TASK_CREATE_PROMPT
-                if not prompt:
-                    return None, PromptType.No_Action
                 return self._get_prompt_(PromptType.Task_Update if task.artifact.content else PromptType.Task_Create, **kwargs)
             else:   # event: upstream change
                 if not task.artifact.content:
@@ -180,26 +179,26 @@ class Action(ABC):
     # @abstractmethod
     def _get_prompt_(self,  prompt_type: PromptType,  **kwargs) -> (str, PromptType):
         task = self.context.task
+        logger.debug(f' getting format: {prompt_type.value} of artifact: {task.artifact.type.value}:{task.artifact.name}')
         if prompt_type == PromptType.Comment:
             return COMMENT_PROMPT.format(comment=kwargs['comment']), PromptType.Comment
-        elif prompt_type == PromptType.Task_Update:
-            prompt = self.TASK_UPDATE_PROMPT.format(content=task.artifact.content, description=task.description,
-                                     format_example=self.FORMAT_EXAMPLE) if self.TASK_UPDATE_PROMPT else None
-            return prompt, prompt_type if prompt else PromptType.No_Action
-        elif prompt_type == PromptType.Task_Create:
-            prompt = self.TASK_CREATE_PROMPT.format(content=task.artifact.content, description=task.description,
-                                                    format_example=self.FORMAT_EXAMPLE) if self.TASK_CREATE_PROMPT else None
-            return prompt, prompt_type if prompt else PromptType.No_Action
-        elif prompt_type == PromptType.Dependency_Create:
-            return self.DEPENDENCY_CREATE_PROMPT.format(source=task.source_artifact.content,
-                                                 format_example=self.FORMAT_EXAMPLE,
-                                                 **kwargs), PromptType.Dependency_Create
-        elif prompt_type == PromptType.Dependency_Update:
-            # return self.DEPENDENCY_UPDATE_PROMPT.format(source=task.source_artifact.previous_content,
-            #                                                    changes=task.source_artifact.changes_text,
-            #                                                    dest=task.artifact.content,
-            #                                                    format_example=self.FORMAT_EXAMPLE), PromptType.Dependency_Update
-            return None, PromptType.No_Action
+        message_update = None
+        dependencies = {artifactType.value: artifact.content for artifactType, artifact in
+                        task.artifact.depend_artifacts.items()}
+        dependencies['format_example'] = self.FORMAT_EXAMPLE
+        if prompt_type == PromptType.Task_Update or prompt_type == PromptType.Dependency_Update:
+            # message_dependency_prompt = self.TASK_UPDATE_INPUT_PROMPT if prompt_type == PromptType.Task_Update else self.DEPENDENCY_UPDATE_INPUT_PROMPT
+            message_dependency_prompt = self.INPUT_PROMPT
+            message_dependency = message_dependency_prompt.format(**dependencies)
+            self.context.historyMessages.append(self.llm._user_msg(message_dependency))
+            self.context.historyMessages.append(self.llm._assistant_msg(task.artifact.content))
+            message_update_prompt = self.TASK_UPDATE_PROMPT if prompt_type == PromptType.Task_Update else self.DEPENDENCY_UPDATE_PROMPT
+            message_update = message_update_prompt.format(update_description=task.description if prompt_type == PromptType.Task_Update else 'TODO',
+                                                          format_example=self.FORMAT_EXAMPLE)
+        else:   # Depdency_Create
+            message_update_prompt = self.INPUT_PROMPT
+            message_update = message_update_prompt.format(**dependencies)
+        return message_update, prompt_type
 
     async def process_task(self, task: Task) -> str:
         if not task.artifact:
@@ -210,7 +209,7 @@ class Action(ABC):
         self.context.artifact = task.artifact
         prompt, prompt_type = self._get_prompt(task)
         if prompt:
-            functions = code_functions if task.artifact.type == ArtifactType.CODE else None
+            functions = code_functions if task.artifact.type in [ArtifactType.DESIGN, ArtifactType.CODE] else None
             result = await self._aask_v2(prompt, simulate=True, functions=functions,
                                          simulate_name=f'{task.artifact.type.value}_{prompt_type.value}_{task.artifact.name}')
             # return self._parse_result(result, task.artifact)

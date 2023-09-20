@@ -21,15 +21,14 @@ class ArtifactType(Enum):
 class Artifact(BaseModel):
     name: str = ''
     type: ArtifactType
-    name: str
     path: str = ''
     content: str = ''
     full_path: Path = None
     previous_content: str = None
     changes_text: str = ''
     changes: dict = {}
-    impact_artifacts: dict = {}  # ['ActionType': list[str]]
-    depend_artifacts: dict = {}  # ['ArtifactType': str]
+    impact_artifacts: dict = {}  # {'ActionType': list[str]}
+    depend_artifacts: dict = {}  # {'ArtifactType': str}
     sub_type: str = None
     parse_mapping: dict = None
 
@@ -51,11 +50,15 @@ class Artifact(BaseModel):
             self.changes = self.changes | parsed_data
             self.changes_text = self._parsed_to_str(self.changes)
             logger.debug(json.dumps(parsed_data, indent=4, ensure_ascii=False))
-        self.pending_content.append(content)
+            self.pending_content.append(self._parsed_to_str(combined_data))
+        else:
+            self.pending_content.append(content)
 
     def _parsed_to_str(self, parsed):
         str = ''
         for key, value in self.parse_mapping.items():
+            if not key in parsed:
+                continue
             type = value['type']
             str += f'## {key}\n'
             if type == 'python':
@@ -64,10 +67,10 @@ class Artifact(BaseModel):
                 str += '\n```\n\n'
             elif type != 'text':
                 str += f'```{type}\n'
-                str += parsed[key]
+                str += parsed.get(key, '')
                 str += '\n```\n\n'
             else:
-                str += parsed[key]
+                str += parsed.get(key, '')
                 str += '\n\n'
         return str
 
@@ -99,37 +102,52 @@ class Artifact(BaseModel):
     def add_watch(self, artifact: 'Artifact', action_type: str):
         artifacts_by_type = self.impact_artifacts.setdefault(action_type, [])
         artifacts_by_type.append(artifact)
-        artifact.depend_artifacts[self.type.value] = self.name
+        artifact.depend_artifacts[self.type] = self
 
     def get_dependency_by_type(self, type: ArtifactType, artifact_mgr: 'ArtifactMgr'):
-        return artifact_mgr.get(type, self.depend_artifacts[type.value])
+        return artifact_mgr.get(type, self.depend_artifacts[type].name)
+
+    def get_persist_dict(self):
+        return {'name': self.name, 'type': self.type.value, 'path': self.path,
+                'depend_artifacts': {k.value: v.name for k,v in self.depend_artifacts.items()}}
 
 
 class ArtifactMgr(BaseModel):
-    byType: dict[str, dict[str, Artifact]] = {}  #
+    byType: dict[ArtifactType, dict[str, Artifact]] = {}  #
     workspace: Workspace
     path: Path = None
 
     @staticmethod
-    def create_artifact_mgr(workspace: Workspace):
+    def create_artifact_mgr(workspace: Workspace, is_load: bool = False):
         artifact_mgr = ArtifactMgr(workspace=workspace)
         artifact_mgr.path = workspace.rootPath / 'artifacts.json'
+        if artifact_mgr.path.exists() and is_load:
+            json_str = artifact_mgr.path.read_text()
+            data_dict = json.loads(json_str)
+            for type_name, type_dict in data_dict['artifacts'].items():
+                for name, artifact_dict in type_dict.items():
+                    artifact_mgr.create_artifact(ArtifactType(type_name), name, path=artifact_dict['path'])
+            for type_name, type_dict in data_dict['artifacts'].items():
+                for name, artifact_dict in type_dict.items():
+                    artifact = artifact_mgr.get(ArtifactType(type_name), name)
+                    artifact.depend_artifacts = {ArtifactType(k): artifact_mgr.get(ArtifactType(k), v) for k,v in artifact_dict['depend_artifacts'].items()}
         return artifact_mgr
 
     def create_artifact(self, artifact_type: ArtifactType, name: str, path: str = '', parse_mapping: dict = None):
         artifact = Artifact(type=artifact_type, name=name, path=path, parse_mapping=parse_mapping)
         artifact.init(self.workspace)
 
-        artifacts_by_type = self.byType.setdefault(artifact_type.value, {})
+        artifacts_by_type = self.byType.setdefault(artifact_type, {})
         artifacts_by_type[name] = artifact
         return artifact
 
     def get(self, artifact_type: ArtifactType, name: str=None):
-        by_type = self.byType.get(artifact_type.value, {})
+        by_type = self.byType.get(artifact_type, {})
         return list(by_type.values())[0] if not name and len(by_type) == 1 else by_type[name]
 
     def save(self):
-        self.path.write_text(self.json(indent=4, ensure_ascii=False))
+        to_dump = {'workspace': self.workspace.get_persist_dict(), 'artifacts': {k.value: {k1: v1.get_persist_dict() for k1,v1 in v.items()} for k,v in self.byType.items()} }
+        self.path.write_text(json.dumps(to_dump, indent=4, ensure_ascii=False))
 
 
 

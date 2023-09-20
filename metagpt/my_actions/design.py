@@ -20,34 +20,21 @@ from metagpt.schema import Task
 from metagpt.actions import PromptType
 from pydantic import BaseModel
 
-DEPENDENCY_PROMPT = """
-TODO
-"""
 
-TASK_PROMPT = """
-# Origin Version
-{content}
 
-# Comment
-{description}
-
-# Format example
-{format_example}
-
------
-Role: You are an architect; the goal is to design a SOTA PEP8-compliant python system; make the best use of good open source tools
-Requirement: The content under 'Origin Version' section is the design you previously given. now We gave some comments in 'Comment' section.  
-please revise the sections as required by these comments, only output sections that modified.
-Max Output: 8192 chars or 2048 tokens. Try to use them up.
+TASK_UPDATE_PROMPT = '''
+Requirement: please revise the design as requests below, you can only output sections that modified. always output 'File List' section with correct file action. files that have action='Updated' indicate that this file need to be updated for this version of design.
 Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote
-"""
+---
+{update_description}
+'''
 
-PROMPT_TEMPLATE = """
+INPUT_PROMPT = """
 # Requirement
-{requirement}
+{PRD}
 
 # System Design
-{system_design}
+{SYSTEM-DESIGN}
 
 # Format example
 {format_example}
@@ -58,15 +45,25 @@ Requirement: Fill in the following missing information based on the context, not
 Max Output: 8192 chars or 2048 tokens. Try to use them up.
 Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote.
 
-## Implementation approach: Provide as Plain text. Analyze the difficult points of the requirements, select the appropriate open-source framework.
-
 ## Package name: Provide as Python str with python triple quoto, concise and clear, characters only use a combination of all lowercase and underscores
 
-## File list: the list of ONLY REQUIRED files needed to write the program(LESS IS MORE!). You must design according to the relevant content in the System Design.  We also need to generate frontent end files under /frontend.
+## Implementation approach: Provide as Plain text. Analyze the difficult points of the requirements. don't repeat the design from 'System Design' here, just follow it.
+
+## UI Design: detail ui design according to the 'UI Design Draft' in prd, should includes: 
+    - 1. ui structure/items description 
+    - 2. endpoints needed to contact with backend. you may need to use function call 'get_api' to know the detail endpoints from the specific module.
+
+## File list: the list of ONLY REQUIRED files needed to write the program. You must design according to the relevant content in the System Design.  list all the files needed in the order of: Backend apis, Backend implementations, Frontend files.
 Provided as list of json objects including following members:
-- path: file relative paths under the packege name above and file name 
-- type: file type, for backend files, must be one of the values ['Service', 'ServiceImpl', 'DataObject', 'DomainObject', 'Repository', 'Vue', 'js']
-- descripton: a section describing what contents should be placed in this file."
+- path: file relative paths under the package name above and file name 
+- type: file type, for backend files, must be one of the values ['Service', 'ServiceImpl', 'DataObject', 'Vue', 'api.js']
+- description: a section describing what contents should be placed in this file.
+- dependencies: a list of file names that this file has dependency on, like: ServiceImpl and api.js depends on Service, Vue depends on api.js
+- action: must be one of the values below: 
+    - NoChange: for later design update, if this file need not to be changed
+    - Created: all the files will have this action when it's first created
+    - Updated: for later design update, if this file need to be updated for this design update
+    - Deleted: for later design update, if this file need to be deleted for this design update
 
 ## Data structures and interface definitions: Use mermaid classDiagram code syntax, including classes and functions (with type annotations), CLEARLY MARK the RELATIONSHIPS between classes. The data structures SHOULD BE VERY DETAILED and the API should be comprehensive with a complete design. 
 
@@ -77,15 +74,14 @@ Provided as list of json objects including following members:
 """
 FORMAT_EXAMPLE = """
 ---
+## Package name
+```python
+"account"
+```
 ## Implementation approach
 - Challenge 1. ..., approach: ...
 - Challenge 2. ..., approach: ...
 - Others ...
-
-## Package name
-```python
-"snake_game"
-```
 
 ## File list
 ```python
@@ -93,18 +89,38 @@ FORMAT_EXAMPLE = """
     {
         "path": "/api/AccountService.java",
         "type": "Service",
-        "description": "put account operations prototype in this api interface"
+        "description": "put account operations prototype in this api interface",
+        "dependencies": [],
+        "action": "NoChange"
     },
     {
         "path": "/api/Account.java",
         "type": "DataObject",
-        "description": "Account data object used by api interface"
+        "description": "Account data object used by api interface",
+        "dependencies": [],
+        "action": "Updated"
     },
     {
         "path": "/model/AccountServiceImpl.java",
         "type": "ServiceImpl",
-        "description": "account service implemtations. ..."
-    }
+        "description": "account service implemtations. ...",
+        "dependencies": ["/api/Account.java", "/api/AccountService.java"],
+        "action": "NoChange"
+    },
+    {
+        "path": "/frontend/api/account-api.js",
+        "type": "api.js",
+        "description": "api of account",
+        "dependencies": ["/api/AccountService.java"],
+        "action": "NoChange"
+    },
+    {
+        "path": "/frontend/view/AccountTransfer.vue",
+        "type": "Vue",
+        "description": "ui of account transfer",
+        "dependencies": ["/frontend/api/account-api.js"],
+        "action": "NoChange"
+    },
     ...
 ]
 ```
@@ -127,6 +143,16 @@ sequenceDiagram
     G->>M: end game
 ```
 
+## UI Design
+- Transfer Money Dialog
+    * ui structure
+        - destination account selection: drop down list
+        - money need to be transferred: number input field
+        - transfer button
+    * endpoints called
+        - to do the transfer: POST /account/transfer
+        - to get the destination accounts constantly used: GET /account/friends
+        
 ## Anything UNCLEAR
 The requirement is clear to me.
 ---
@@ -137,6 +163,8 @@ class CodeArtifact(BaseModel):
     path: str
     type: str
     description: str
+    dependencies: list[str]
+    action: str
 
 
 OUTPUT_MAPPING = {
@@ -145,22 +173,25 @@ OUTPUT_MAPPING = {
     "File list": {'python_type': (List[CodeArtifact], ...), 'type': 'python'},
     "Data structures and interface definitions": {'python_type': (str, ...), 'type': 'mermaid'},
     "Program call flow":  {'python_type': (str, ...), 'type': 'mermaid'},
+    "UI Design": {'python_type': (str, ...), 'type': 'text'},
     "Anything UNCLEAR": {'python_type': (str, ...), 'type': 'text'}
 }
 
 
 class WriteDesign(Action):
-    def __init__(self, name, context=None, llm=None):
-        super().__init__(name, context, llm)
+    def __init__(self, name, context=None, llm=None, type=None):
+        super().__init__(name, context, llm, type=type)
         self.desc = "Based on the PRD, think about the system design, and design the corresponding APIs, " \
                     "data structures, library tables, processes, and paths. Please provide your design, feedback " \
                     "clearly and in detail."
         self.dest_artifact_type = ArtifactType.DESIGN
         self._output_mapping = OUTPUT_MAPPING
         self._output_cls_name = "design"
-        self.DEPENDENCY_CREATE_PROMPT = PROMPT_TEMPLATE
+        self.INPUT_PROMPT = INPUT_PROMPT
+        self.TASK_UPDATE_PROMPT = TASK_UPDATE_PROMPT
         self.FORMAT_EXAMPLE = FORMAT_EXAMPLE
 
+    '''
     def _get_prompt_(self, prompt_type: PromptType, **kwargs) -> (str, PromptType):
         if prompt_type == PromptType.Dependency_Create:
             prd = self.context.artifact.get_dependency_by_type(ArtifactType.PRD, self.context.env.artifact_mgr)
@@ -168,6 +199,7 @@ class WriteDesign(Action):
             return PROMPT_TEMPLATE.format(requirement=prd.content, system_design=system_design.content, format_example=FORMAT_EXAMPLE), PromptType.Dependency_Create
         else:
             return super()._get_prompt_(prompt_type, **kwargs)
+    '''
 
     def recreate_workspace(self, workspace: Path):
         try:
@@ -213,12 +245,12 @@ class WriteDesign(Action):
         artifacts = super().create_artifacts(event)
         artifact = artifacts[0]
         system_design = self.context.env.artifact_mgr.get(ArtifactType.SYSTEM_DESIGN)
-        artifact.depend_artifacts[ArtifactType.SYSTEM_DESIGN.value] = system_design.name
+        system_design.add_watch(artifact, 'DESIGN')
+        # artifact.depend_artifacts[ArtifactType.SYSTEM_DESIGN] = system_design
         return artifacts
 
     def postprocess(self):
         # generate new task to generate code
-        # TODO refactor to Code action.create_artifacts
         artifact = self.context.artifact
         content = artifact.content
         resources_path = self.context.env.workspace.rootPath / 'docs'

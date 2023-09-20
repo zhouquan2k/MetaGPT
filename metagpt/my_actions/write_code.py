@@ -57,22 +57,33 @@ class WriteCode(Action):
         return code
 
     def _get_prompt_(self, prompt_type: PromptType, **kwargs) -> (str, PromptType):
+        artifact = self.context.artifact
+        design = artifact.get_dependency_by_type(ArtifactType.DESIGN, self.context.env.artifact_mgr)
         if prompt_type == PromptType.Dependency_Create:
-            artifact = self.context.artifact
-            design = artifact.get_dependency_by_type(ArtifactType.DESIGN, self.context.env.artifact_mgr)
             system_design = self.context.env.artifact_mgr.get(ArtifactType.SYSTEM_DESIGN)
             code_type = artifact.sub_type
             code_ext = artifact.full_path.suffix
             path = self.context.env.workspace.rootPath / 'examples' / f'{code_type}{code_ext}'
             example = path.read_text()
             return PROMPT_TEMPLATE.format(design=design.content, system_design=system_design.content, filename=self.context.artifact.full_path, example=example), PromptType.Dependency_Create
+        elif prompt_type == PromptType.Dependency_Update:
+            file_list = getattr(design.instruct_content, 'File list')
+            for file in file_list:
+                if file.path == f'/{artifact.path}/{artifact.name}':
+                    if file.action == 'Update':
+                    # TODO Delete
+                        return super()._get_prompt_(prompt_type, **kwargs)
+                    else:
+                        return None, PromptType.No_Action
         else:
             return super()._get_prompt_(prompt_type, **kwargs)
+
 
     def create_artifacts(self, event):
         artifact = event.artifact
         file_list = getattr(artifact.instruct_content, 'File list')
         package_name = getattr(artifact.instruct_content, 'Package name')
+        system_design = self.context.env.artifact_mgr.get(ArtifactType.SYSTEM_DESIGN)
         artifacts = []
         for file in file_list:
             path = self.context.env.workspace.rootPath / f'src/main/java/{package_name}' / file.path
@@ -80,5 +91,7 @@ class WriteCode(Action):
             new_artifact.sub_type = file.type
             # TODO assign task to write_code
             artifact.add_watch(new_artifact, "WRITE_CODE")
+            system_design.add_watch(new_artifact, "WRITE_CODE")
             artifacts.append(new_artifact)
+
         return artifacts

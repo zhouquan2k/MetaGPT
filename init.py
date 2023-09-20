@@ -2,9 +2,9 @@ from metagpt.roles import Architect, Engineer, ProductManager, ProjectManager, Q
 from metagpt.software_company import SoftwareCompany
 
 
-def init_company(project_name, investment: float = 3.0, code_review: bool = False, run_tests: bool = False):
+def init_company(project_name, investment: float = 3.0, code_review: bool = False, run_tests: bool = False, is_load_artifacts=False):
     company = SoftwareCompany()
-    company.environment.init(project_name)
+    company.environment.init(project_name, is_load=is_load_artifacts)
     company.hire([ProductManager(),
                   Architect(),
                   ProjectManager(),
