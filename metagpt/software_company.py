@@ -109,7 +109,6 @@ class SoftwareCompany(BaseModel):
         action = task.action.value('TODO', context=context, llm=llm)
         action.type = task.action
         output = await action.process_task(task)
-        logger.info(output)
         return context
 
     async def execute_remain_tasks(self):
@@ -135,18 +134,12 @@ class SoftwareCompany(BaseModel):
                     action = _action.value('TODO', context=context, llm=llm, type=_action)
                     action.create_artifacts(event)
 
-                    # if not action.multiple_artifacts:  # one to one
                     impact_artifacts = event.artifact.impact_artifacts.get(_action.name, [])
                     if len(impact_artifacts) == 0:
                         self.environment.task_queue.append(Task(source_artifact=event.artifact, action=_action))
                     else:
                         for artifact in impact_artifacts:
-                            self.environment.task_queue.append(
-                            Task(source_artifact=event.artifact, action=_action, artifact=artifact))
-
-                    #else:  # one to many
-                    #    raise NotImplementedError()
-
+                            self.environment.task_queue.append(Task(source_artifact=event.artifact, action=_action, artifact=artifact))
             event = self.environment.get_next_event()
 
     def _save(self):

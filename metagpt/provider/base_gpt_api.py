@@ -36,19 +36,18 @@ class BaseGPTAPI(BaseChatbot):
         rsp = self.completion(message)
         return self.get_choice_text(rsp)
 
-    async def aask(self, msg: str, system_msgs: Optional[list[str]] = None, history: list = None, functions: list[dict]=None) -> str:
-        history = history if history else []
+    async def aask(self, msg: str, system_msgs: Optional[list[str]] = None, history: list = [], functions: list[dict]=None) -> str:
         if system_msgs:
             message = self._system_msgs(system_msgs) + history + [self._user_msg(msg)]
         else:
             message = [self._default_system_msg()] + history + [self._user_msg(msg)]
+        logger.debug(f'function: {functions}')
+        for i, _msg in enumerate(message):
+            logger.debug(f"/// 【{i}】 {_msg['role']}: {_msg['content']}")
         rsp = await self.acompletion_text(message, stream=True, functions=functions)
         history.append(self._user_msg(msg))
         if isinstance(rsp, str):
             history.append(self._assistant_msg(rsp))
-        for msg in message:
-            logger.debug(msg)
-        # logger.debug(rsp)
         return rsp
 
     def _extract_assistant_rsp(self, context):

@@ -32,35 +32,35 @@ async def test_new_requirement_task():
 async def test_design():
     company = init_company('HEthics')
     (company.environment.workspace.rootPath / f'docs/DESIGN_{module_name}.md').unlink(True)
-    prd = company.environment.artifact_mgr.create_artifact(ArtifactType.PRD, f'{module_name}.md', path="docs")
-    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'system_design.md', path="docs")
+    prd = company.environment.artifact_mgr.create_artifact(ArtifactType.PRD, f'PRD_{module_name}.md', path="docs")
+    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'SYSTEM-DESIGN_system_design.md', path="input-docs")
     company.add_artifact_event(prd)
     # design
     context = await company.execute_next_task()
     context.commit()
-    '''
-    # first code
-    context = await company.execute_next_task()
-    context.commit()
-    company.environment.artifact_mgr.save()
 
-    # await company.execute_remain_tasks()
-
+    #await context.comment('''
+    #    - "/user/reviewers", "/user/participants" 应属于User module提供的endpoint，不要在"Endpoints to implement"中描述
+    #    - "/file/list" 修改为 "/meeting/file/list"
+    #''')
+    #context.commit()
     # company.environment.artifact_mgr.save()
-    # await context.comment('- Reviewer和Attendee应该都是Meeting的属性，都是在可登录的用户/特定角色中选择，可以使用User类，不需要创建单独的实体。
-    # -File List中的文件命名没有按照System Design的规范')
-    '''
-
 
 async def test_code():
     company = init_company('HEthics')
-    design = company.environment.artifact_mgr.create_artifact(ArtifactType.DESIGN, f'{module_name}.md', path="docs", parse_mapping=Design_Output_Mapping)
+    design = company.environment.artifact_mgr.create_artifact(ArtifactType.DESIGN, f'DESIGN_{module_name}.md', path="docs", parse_mapping=Design_Output_Mapping)
     # TODO parse_mapping use protected attr
-    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'system_design.md', path="input-docs")
+    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'SYSTEM-DESIGN_system_design.md', path="input-docs")
     company.add_artifact_event(design)
-    # Service
+    # DataObject
     context = await company.execute_next_task()
     context.commit()
+    # Service
+    context = await company.execute_next_task()
+    await context.comment('please check the consistency to "Data structures and interface definitions" of DESIGN')
+
+
+    '''
     # Data Object
     context = await company.execute_next_task()
     context.commit()
@@ -73,18 +73,15 @@ async def test_code():
     # js
     context = await company.execute_next_task()
     context.commit()
-
+    '''
 
 
 async def test_modify_design():
+    await test_design()
     company = init_company('HEthics', is_load_artifacts=True)
-    design = company.environment.artifact_mgr.get(ArtifactType.DESIGN, f'{module_name}.md')
-    # task = Task(artifact=design, description='''
-    #- you didn't consider about api js files which used to call backend endpoints in the 'File List'.
-    #- For selecting meeting participants, we'll use 'get all users' endpoint from 'User' module to get the users in the dropdown select
-    #''')
+    design = company.environment.artifact_mgr.get_by_path(f'docs/DESIGN_{module_name}.md')
     task = Task(artifact=design, description='''
-        - For selecting meeting participants/reviewers, we'll use 'get all users' endpoint from 'User' module to get the users in the dropdown select
+        - you didn't consider about the endpoints: 
         ''')
 
     company.add_project_task(task)
@@ -92,20 +89,24 @@ async def test_modify_design():
     context = await company.execute_next_task()
     context.commit()
 
-    '''
-    # code
+    # code - DataObject
     context = await company.execute_next_task()
     context.commit()
 
+    # code - Service
     context = await company.execute_next_task()
     context.commit()
 
+    # code -ServiceImpl
     context = await company.execute_next_task()
     context.commit()
 
+    # code - api.js
     context = await company.execute_next_task()
     context.commit()
-    '''
 
+    # code - vue
+    context = await company.execute_next_task()
+    context.commit()
 
 asyncio.run(test_modify_design())

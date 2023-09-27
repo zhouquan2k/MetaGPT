@@ -21,19 +21,39 @@ from metagpt.artifact import Artifact, ArtifactType
 from enum import Enum
 from metagpt.utils.common import CodeParser
 
-USER_PROMPT = '''
-{user_prompt} 
-
-REMEMBER: Always output the full PRD even when part of it need to be modified.   
-'''
-
 COMMENT_PROMPT = '''
-please revise according to the comment below:
+please revise according to the comment below {comment_supplementary}
 
 COMMENT: ```{comment}
 ```
 '''
 
+COMMENT_SUPPLEMENTARY = ', you can only output modified sections.'
+
+SYSTEM_PROMPT = '''
+{action_prefix}
+'''
+
+'''
+the user question will have a few INPUT sections, one INSTRUCTION section which will reference contents in INPUT sections, 
+and one optional EXAMPLE section at the end.
+all sections will be divided by '----- <SECTION NAME> ------'.
+'''
+
+SECTION_PROMPT = '''
+----- {type} -----
+{content}
+
+'''
+
+DEPENDENCY_UPDATE_PROMPT = '''
+One of dependent input '{changed_artifact_name}' has been changed. The Changed version is below after '-----'.
+You must compare two versions first, then change {artifact_name_to_change} accordingly. 
+
+----- New Version of '{changed_artifact_name}' -----
+{changed_artifact_content}
+
+'''
 
 class PromptType(Enum):
     Default = "default"
@@ -45,28 +65,39 @@ class PromptType(Enum):
     No_Action = "no_action"
 
 
-def get_api(module_name: str = 'TODO'):
-    print('get_api: ' + module_name)
-    path = Path(f'/Users/zhouquan/Workspace/Generated-metagpt/HEthics/input-docs/API_{module_name}.json')
-    return path.read_text()
+class PromptCategory(Enum):
+    EXAMPLE = "EXAMPLE",
+    INSTRUCTION = "INSTRUCTION"
 
 
-code_functions = [
+def get_api(module_names: list[str] = 'TODO'):
+    print(f'get_api: {module_names}')
+    ret_text = ''
+    for module_name in module_names:
+        path = Path(f'/Users/zhouquan/eclipse-workspace-new/Generated-metagpt/HEthics/input-docs/API_{module_name}.json')
+        ret_text += SECTION_PROMPT.format(type=module_name, content=path.read_text())
+    return ret_text
+
+
+all_functions = [
     {
         'name': 'get_api',
-        'description': 'to get the detail endpoints functionality/specification for an public module listed in "System Design" if you want to call one of the endpoints of these public modules.',
+        'description': 'to get the detail endpoints functionality/specification for public modules listed in "System Design" if you want to call some endpoints of these public modules.',
         'parameters': {
             'type': 'object',
             'properties': {
-                'module_name': {
-                    'type': 'string',
-                    'description': 'name of the module you want to know more about'
+                'module_names': {
+                    'type': 'array',
+                    'description': 'name of the modules you want to know more about',
+                    'items': {
+                        'type': 'string'
+                    }
                 }
-            }
+            },
+            'required': ['module_names']
         }
     }
 ]
-
 
 
 class Action(ABC):
@@ -87,13 +118,10 @@ class Action(ABC):
         # self.multiple_artifacts = False
         self.dest_artifact_type: ArtifactType = None
         # self.TASK_CREATE_PROMPT: str = 'TODO'  # not used
-        self.INPUT_PROMPT: str = 'TODO'
-        self.TASK_UPDATE_PROMPT: str = 'TODO'
-
-        self.DEPENDENCY_UPDATE_INPUT_PROMPT: str = 'TODO'
-        self.DEPENDENCY_UPDATE_PROMPT: str = 'TODO'
-        self.DEPENDENCY_CREATE_PROMPT: str = 'TODO'
-        self.FORMAT_EXAMPLE: str = 'TODO'
+        self.instruction_prompt: str = 'TODO'
+        self.example_prompt: str = None
+        self.task_update_prompt: str = 'TODO'
+        self.dependency_update_prompt: str = DEPENDENCY_UPDATE_PROMPT
 
     def set_prefix(self, prefix, profile):
         """Set prefix for later usage"""
@@ -139,11 +167,11 @@ class Action(ABC):
         instruct_content = output_class(**parsed_data)
         return ActionOutput(content, instruct_content)
 
-    async def _aask_v2(self, prompt, simulate_name: str = None, simulate: bool = False,
+    async def _aask_v2(self, prompt: str, simulate_name: str = None, simulate: bool = False,
                        system_msgs: Optional[list[str]] = None, functions: list[str]=None) -> str:
         if not system_msgs:
             system_msgs = []
-        system_msgs.append(self.prefix)
+        # system_msgs.append(self.prefix)
         content = None
         path = self.context.env.workspace.rootPath / 'simulate' / simulate_name if simulate_name else None
         if simulate and path and path.exists():
@@ -151,13 +179,12 @@ class Action(ABC):
             self.context.historyMessages.append(self.llm._user_msg(prompt))
             self.context.historyMessages.append(self.llm._assistant_msg(content))
         else:
-            logger.debug(system_msgs)
-            logger.debug(prompt)
             content = await self.llm.aask(prompt, system_msgs, history=self.context.historyMessages, functions=functions)
             # to persist for simulate
             if path:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
+        logger.info(content)
         return content
 
     async def run(self, *args, **kwargs):
@@ -176,30 +203,48 @@ class Action(ABC):
                 else:
                     return self._get_prompt_(PromptType.Dependency_Update, **kwargs)
 
+    def _get_prompt_by_type(self, type: PromptCategory, artifact: Artifact):
+        if type == PromptCategory.EXAMPLE:
+            return self.example_prompt
+        elif type == PromptCategory.INSTRUCTION:
+            return self.instruction_prompt
+
     # @abstractmethod
     def _get_prompt_(self,  prompt_type: PromptType,  **kwargs) -> (str, PromptType):
         task = self.context.task
-        logger.debug(f' getting format: {prompt_type.value} of artifact: {task.artifact.type.value}:{task.artifact.name}')
+        logger.debug(f' getting prompt: {prompt_type.value} of artifact: {task.artifact.type.value}:{task.artifact.name}')
         if prompt_type == PromptType.Comment:
-            return COMMENT_PROMPT.format(comment=kwargs['comment']), PromptType.Comment
+            return COMMENT_PROMPT.format(comment=kwargs['comment'], comment_supplementary=COMMENT_SUPPLEMENTARY if task.artifact.type != ArtifactType.CODE else ''), PromptType.Comment
         message_update = None
-        dependencies = {artifactType.value: artifact.content for artifactType, artifact in
-                        task.artifact.depend_artifacts.items()}
-        dependencies['format_example'] = self.FORMAT_EXAMPLE
+        message_dependency = ''
+        for artifact in task.artifact.depend_artifacts:
+            name = f'{artifact.type.value} {artifact.relative_path if artifact.type == ArtifactType.CODE else ""}'
+            dependency_prompt = SECTION_PROMPT.format(type=f'INPUT: {name}', content=artifact.content if artifact != task.source_artifact else artifact.previous_content)
+            message_dependency += dependency_prompt
+        message_dependency += SECTION_PROMPT.format(type='INSTRUCTION', content=self._get_prompt_by_type(PromptCategory.INSTRUCTION, task.artifact) \
+                              + (SECTION_PROMPT.format(type='EXAMPLE',
+                                                      content=self._get_prompt_by_type(PromptCategory.EXAMPLE, task.artifact))) if self.example_prompt else '')
+        return_message = None
         if prompt_type == PromptType.Task_Update or prompt_type == PromptType.Dependency_Update:
-            # message_dependency_prompt = self.TASK_UPDATE_INPUT_PROMPT if prompt_type == PromptType.Task_Update else self.DEPENDENCY_UPDATE_INPUT_PROMPT
-            message_dependency_prompt = self.INPUT_PROMPT
-            message_dependency = message_dependency_prompt.format(**dependencies)
+            # message_dependency_prompt = self.INPUT_PROMPT
+            # message_dependency = message_dependency_prompt.format(**dependencies)
+            # if prompt_type == PromptType.Dependency_Update:
+            #     message_dependency += SECTION_PROMPT.format(type=f'ORIGIN {task.source_artifact.get_name()}', content=task.source_artifact.previous_content)
             self.context.historyMessages.append(self.llm._user_msg(message_dependency))
             self.context.historyMessages.append(self.llm._assistant_msg(task.artifact.content))
-            message_update_prompt = self.TASK_UPDATE_PROMPT if prompt_type == PromptType.Task_Update else self.DEPENDENCY_UPDATE_PROMPT
-            message_update = message_update_prompt.format(update_description=task.description if prompt_type == PromptType.Task_Update else 'TODO',
-                                                          format_example=self.FORMAT_EXAMPLE)
+            if prompt_type == PromptType.Task_Update:
+                message_update_prompt = self.task_update_prompt
+                message_update = message_update_prompt.format(update_description=task.description,  format_example=self._get_prompt_by_type(PromptCategory.EXAMPLE, task.artifact))
+            else:  # Dependency_Update
+                message_update_prompt = self.dependency_update_prompt
+                message_update = message_update_prompt.format(changed_artifact_name=task.source_artifact.get_name(), artifact_name_to_change=task.artifact.get_name(), changed_artifact_content=task.source_artifact.content)
+            return_message = message_update
         else:   # Depdency_Create
-            message_update_prompt = self.INPUT_PROMPT
-            message_update = message_update_prompt.format(**dependencies)
-        return message_update, prompt_type
+            return_message = message_dependency
+        return return_message, prompt_type
 
+    def _get_function_list(self, artifact: Artifact):
+        return []
     async def process_task(self, task: Task) -> str:
         if not task.artifact:
             return ''
@@ -208,13 +253,16 @@ class Action(ABC):
         self.context.task = task
         self.context.artifact = task.artifact
         prompt, prompt_type = self._get_prompt(task)
+        logger.info(f'prompt: {prompt_type}')
         if prompt:
-            functions = code_functions if task.artifact.type in [ArtifactType.DESIGN, ArtifactType.CODE] else None
-            result = await self._aask_v2(prompt, simulate=True, functions=functions,
+            function_list = self._get_function_list(task.artifact)
+            functions = [function for function in all_functions if function['name'] in function_list]
+            system_msg = [SYSTEM_PROMPT.format(action_prefix=self.prefix)] if self.prefix else []
+            result = await self._aask_v2(prompt, simulate=True, functions=functions, system_msgs=system_msg,
                                          simulate_name=f'{task.artifact.type.value}_{prompt_type.value}_{task.artifact.name}')
             # return self._parse_result(result, task.artifact)
             if task.artifact.type == ArtifactType.CODE:  # TODO
-                task.artifact.content = CodeParser.parse_code(block="", text=result)
+                task.artifact.pending_content.append(CodeParser.parse_code(block="", text=result))
             else:
                 task.artifact.parse_mapping = self._output_mapping
                 task.artifact.parse(result)
@@ -227,10 +275,14 @@ class Action(ABC):
             else:
                 return ''
 
-    async def comment(self, comment) -> str:
+    async def comment(self, comment, use_functions=False) -> str:
+        artifact = self.context.task.artifact
+        function_list = self._get_function_list(artifact)
+        functions = [function for function in all_functions if function['name'] in function_list]
+        system_msg = [SYSTEM_PROMPT.format(action_prefix=self.prefix)] if self.prefix else []
         prompt, type = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
-        result = await self._aask_v2(prompt)
-        return self._parse_result(result, self.context.artifact)
+        result = await self._aask_v2(prompt, system_msgs=system_msg, simulate=True, simulate_name=f'comment_{artifact.name}', functions=functions if use_functions else None)
+        return artifact.parse(result)
 
     def commit(self):
         artifact = self.context.artifact
@@ -242,10 +294,11 @@ class Action(ABC):
         self.context.artifact = None
         self.context.historyMessages = []
         self.context.env.publish_event(Event(artifact=artifact))
-        return artifact
+        return
 
     def create_artifacts(self, event):
-        artifact = self.context.env.artifact_mgr.create_artifact(self.dest_artifact_type, event.artifact.name, path=event.artifact.path)
+        name = f'{self.dest_artifact_type.value}_{event.artifact.name.split("_", 1)[1]}'
+        artifact = self.context.env.artifact_mgr.create_artifact(self.dest_artifact_type, name, path="docs")
         event.artifact.add_watch(artifact, self.type.name)
         return [artifact]
 

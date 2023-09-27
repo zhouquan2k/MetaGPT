@@ -179,6 +179,7 @@ class OpenAIGPTAPI(BaseGPTAPI, RateLimiter):
             ret = function(**parameters)
             messages.append({'role': 'assistant', 'function_call': function_call, 'content': None})
             messages.append({'role': 'function', 'name':function_call['name'], 'content': ret})
+            logger.info(f'FUNCTION RETURN: {ret}')
             return await self._achat_completion_stream(messages)
         else:
             full_reply_content = "".join([m.get("content", "") for m in collected_messages])
@@ -194,7 +195,7 @@ class OpenAIGPTAPI(BaseGPTAPI, RateLimiter):
                 "max_tokens": self.get_max_tokens(messages),
                 "n": 1,
                 "stop": None,
-                "temperature": 0.3,
+                "temperature": 0.1,
             }
         else:
             kwargs = {

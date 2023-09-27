@@ -12,7 +12,6 @@ from metagpt.schema import Task
 from metagpt.actions.search_and_summarize import SearchAndSummarize
 from metagpt.logs import logger
 from metagpt.artifact import Artifact, ArtifactType
-from metagpt.actions.action import USER_PROMPT
 from pydantic import BaseModel
 
 PROMPT_TEMPLATE = """

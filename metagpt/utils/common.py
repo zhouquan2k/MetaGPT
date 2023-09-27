@@ -56,12 +56,17 @@ class OutputParser:
         if match:
             lang = match.group(1)
             if lang == 'python':
-                code = json.loads(match.group(2))
+                try:
+                    code = json.loads(match.group(2))
+                except Exception as e:
+                    raise Exception('parse python/json failed: '+text)
             else:
                 code = match.group(2)
+            return code
         else:
-            raise Exception
-        return code
+            # raise Exception
+            return text
+
 
     @classmethod
     def parse_str(cls, text: str):
@@ -127,10 +132,7 @@ class OutputParser:
         parsed_data = {}
         for block, content in block_dict.items():
             # 尝试去除code标记
-            try:
-                content = cls.parse_code(text=content)
-            except Exception:
-                pass
+            content = cls.parse_code(text=content)
             typing_define = mapping.get(block, {}).get('python_type', None)
             if isinstance(typing_define, tuple):
                 typing = typing_define[0]
