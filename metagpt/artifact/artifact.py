@@ -100,7 +100,7 @@ class Artifact():
 
     def _load(self):
         logger.info(f"Loading from {self.full_path}")
-        self.content = self.full_path.read_text()
+        self.previous_content = self.content = self.full_path.read_text()
 
     def add_watch(self, artifact: 'Artifact', action_type: str):
         artifacts_by_type = self.impact_artifacts.setdefault(action_type, [])
@@ -113,6 +113,7 @@ class Artifact():
 
     def get_persist_dict(self):
         return {'name': self.name, 'type': self.type.value, 'path': self.path,
+                'sub_type': self.sub_type,
                 'depend_artifacts': [artifact.relative_path for artifact in self.depend_artifacts]
                 }
 
@@ -134,12 +135,14 @@ class ArtifactMgr():
             data_dict = json.loads(json_str)
             for type_name, type_dict in data_dict['artifacts'].items():
                 for path, artifact_dict in type_dict.items():
-                    artifact_mgr.create_artifact(ArtifactType(type_name), artifact_dict['name'], path=artifact_dict['path'])
+                    artifact = artifact_mgr.create_artifact(ArtifactType(type_name), artifact_dict['name'], path=artifact_dict['path'])
+                    if artifact_dict['sub_type']:
+                        artifact.sub_type = artifact_dict['sub_type']
             for type_name, type_dict in data_dict['artifacts'].items():
                 for path, artifact_dict in type_dict.items():
                     artifact = artifact_mgr.get_by_path(path)
                     artifact.depend_artifacts = [artifact_mgr.get_by_path(path) for path in artifact_dict['depend_artifacts']]
-                    # TODO artifact.depend_artifacts_by_type = {artifact_mgr.get_by_path(path).type: artifact_mgr.get_by_path(path) for path in artifact_dict['depend_artifacts']}
+                    artifact.depend_artifacts_by_type = {artifact_mgr.get_by_path(path).type: artifact_mgr.get_by_path(path) for path in artifact_dict['depend_artifacts']}
         return artifact_mgr
 
     def create_artifact(self, artifact_type: ArtifactType, name: str, path: str = '', parse_mapping: dict = None):

@@ -21,14 +21,15 @@ from metagpt.llm import LLM
 ArtifactTypeToAction = {
     ArtifactType.RAW_REQUIREMENT: ActionType.ADD_REQUIREMENT,
     ArtifactType.PRD: ActionType.WRITE_PRD,
-    ArtifactType.DESIGN: ActionType.WRITE_DESIGN
+    ArtifactType.DESIGN: ActionType.WRITE_DESIGN,
+    ArtifactType.CODE: ActionType.WRITE_CODE
 }
 
 ArtifactTypeDependency = {
     ArtifactType.SYSTEM_DESIGN: [ActionType.WRITE_DESIGN],
-    ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_PRD],
+    ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_PRD],  # ActionType.WRITE_DESIGN
     ArtifactType.PRD: [ActionType.WRITE_DESIGN],
-    ArtifactType.DESIGN: [ActionType.WRITE_CODE]
+    ArtifactType.DESIGN: [ActionType.WRITE_CODE, ]
 }
 
 

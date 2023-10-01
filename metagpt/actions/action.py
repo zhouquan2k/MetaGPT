@@ -46,6 +46,15 @@ SECTION_PROMPT = '''
 
 '''
 
+TASK_UPDATE_PROMPT = '''
+please revise the sections as required by these comments, you can only output sections that modified.
+ATTENTION: Use '##' to SPLIT SECTIONS, not '#'. AND '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote. Output carefully referenced "Format example" in format.
+
+```
+{update_description}
+```
+'''
+
 DEPENDENCY_UPDATE_PROMPT = '''
 One of dependent input '{changed_artifact_name}' has been changed. The Changed version is below after '-----'.
 You must compare two versions first, then change {artifact_name_to_change} accordingly. 
@@ -120,7 +129,7 @@ class Action(ABC):
         # self.TASK_CREATE_PROMPT: str = 'TODO'  # not used
         self.instruction_prompt: str = 'TODO'
         self.example_prompt: str = None
-        self.task_update_prompt: str = 'TODO'
+        self.task_update_prompt: str = TASK_UPDATE_PROMPT
         self.dependency_update_prompt: str = DEPENDENCY_UPDATE_PROMPT
 
     def set_prefix(self, prefix, profile):
@@ -219,7 +228,7 @@ class Action(ABC):
         message_dependency = ''
         for artifact in task.artifact.depend_artifacts:
             name = f'{artifact.type.value} {artifact.relative_path if artifact.type == ArtifactType.CODE else ""}'
-            dependency_prompt = SECTION_PROMPT.format(type=f'INPUT: {name}', content=artifact.content if artifact != task.source_artifact else artifact.previous_content)
+            dependency_prompt = SECTION_PROMPT.format(type=f'INPUT: {name}', content=artifact.content if prompt_type != PromptType.Dependency_Update or artifact != task.source_artifact else artifact.previous_content)
             message_dependency += dependency_prompt
         message_dependency += SECTION_PROMPT.format(type='INSTRUCTION', content=self._get_prompt_by_type(PromptCategory.INSTRUCTION, task.artifact) \
                               + (SECTION_PROMPT.format(type='EXAMPLE',

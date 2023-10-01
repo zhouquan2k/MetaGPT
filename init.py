@@ -1,5 +1,7 @@
 from metagpt.roles import Architect, Engineer, ProductManager, ProjectManager, QaEngineer
 from metagpt.software_company import SoftwareCompany
+from metagpt.artifact import ArtifactType
+from metagpt.schema import Task
 
 
 def init_company(project_name, investment: float = 3.0, code_review: bool = False, run_tests: bool = False, is_load_artifacts=False):

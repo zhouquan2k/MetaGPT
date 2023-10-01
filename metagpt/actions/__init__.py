@@ -10,7 +10,7 @@ from metagpt.actions.action import Action, PromptType
 from metagpt.actions.action_output import ActionOutput
 from metagpt.actions.add_requirement import BossRequirement
 from metagpt.actions.debug_error import DebugError
-from metagpt.my_actions.design import WriteDesign
+from metagpt.my_actions.design_ui import WriteDesign
 from metagpt.actions.design_api_review import DesignReview
 from metagpt.actions.design_filenames import DesignFilenames
 from metagpt.actions.project_management import AssignTasks, WriteTasks

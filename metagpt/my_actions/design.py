@@ -18,17 +18,6 @@ from metagpt.artifact.artifact import Artifact, ArtifactType
 from pydantic import BaseModel
 
 
-
-TASK_UPDATE_PROMPT = '''
-Please revise the design as requests below, you can only output sections that modified. always output 'File List' section with correct file action. files with action='Updated' indicate that this file need to be updated for this version of design.
-Attention: Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote
-
-```
-{update_description}
-```
-'''
-
-
 FORMAT_EXAMPLE = """
 ## Package name
 ```python
@@ -207,7 +196,6 @@ class WriteDesign(Action):
         self.prefix = ACTION_PREFIX
         self.instruction_prompt = INSTRUCTION
         self.example_prompt = FORMAT_EXAMPLE
-        self.task_update_prompt = TASK_UPDATE_PROMPT
         self._output_mapping = OUTPUT_MAPPING
         self._output_cls_name = "design"
 
