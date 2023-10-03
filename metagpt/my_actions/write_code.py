@@ -30,7 +30,7 @@ INSTRUCTION_PROMPT = """
 1. Do your best to implement THIS ONLY ONE FILE. ONLY USE EXISTING API. IF NO API, IMPLEMENT IT.
 2. note to return only in code form, your code will be part of the entire project, so please implement complete, reliable, reusable code snippets
 3. Attention1: ALWAYS USE STRONG TYPE AND EXPLICIT VARIABLE.
-4. Attention2: YOU MUST FOLLOW "Endpoints to implement" in DESIGN section above. DONT CHANGE ANY DESIGN.
+4. Attention2: YOU MUST FOLLOW "Endpoints to implement" in DESIGN section above. use the exactly function prototype as described in ''  DONT CHANGE ANY DESIGN.
 5. Think before writing: What should be implemented and provided in this document?
 6. Do not omit anything. 
 7. please follow the code example under section 'EXAMPLE' exactly

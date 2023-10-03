@@ -47,39 +47,61 @@ FORMAT_EXAMPLE = """
         - 无
 
 ## Endpoints to implement
-```yaml
-openapi: 3.0.0
-info:
-  title: Refund API
-paths:
-  /api/patients:
-    get:
-      summary: Search patients
-      parameters:
-      - name: "name"
-          in: "query"
-          required: false
-          description: "姓名"
-          schema:
-            type: "string"
-    `responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Patient'
-components:
-  schemas:
-    Patient:
-      type: object
-      properties:
-        patientId:
-          type: string
-        cardNumber:
-          type: string
-        name:
-          type: string
-        ...
+```api-blueprint
+* Refund API
+
+** Search Patients [GET /api/patients{?name,cardNumber,idNumber}]
+用于搜索患者的 API。
+实现方法名： getPatients(string name,string cardNumber,string idNumber)
+
++ Parameters
+    + name (optional, string) - 姓名
+    + cardNumber (optional, string) - 卡号
+    + idNumber (optional, string) - 身份证号
+
++ Response 200 (application/json)
+    + Attributes (array[Patient])
+
+** Search a Patient's Registration [GET /api/patients/{patientId}/visits]
+用于搜索患者挂号的 API。
+实现方法名： getPatientVisits(string patientId)
+
++ Parameters
+    + patientId (required, string) - 患者ID
+
++ Response 200 (application/json)
+    + Attributes (array[Visit])
+
+** Execute Refund [POST /api/refund{?orderId}]
+用于执行退款的 API。
+实现方法名： refund(string orderId)
+
++ Parameters
+    + orderId (required, string) - 需要退款的订单ID
+
++ Request (application/json)
+    + Attributes
+        + orderId: `123456` (string, required) - 需要退款的订单ID
+
++ Response 200 (application/json)
+
+* Data Structures
+
+** Patient
++ cardNumber: `1234567890` (string) - 卡号
++ name: `Alice` (string) - 姓名
++ phone: `1234567890` (string) - 电话号码
++ idNumber: `A1234567890` (string) - 身份证号
++ address: `123 Street, City, Country` (string) - 地址
++ patientId: `123` (string) - 患者ID
+
+** Visit
++ visitDate: `2023-09-27` (string) - 访问日期
++ department: `Cardiology` (string) - 科室
++ doctor: `Dr. Smith` (string) - 医生
++ visitType: `Outpatient` (string) - 访问类型
++ status: `Completed` (string) - 状态
++ paidAmount: `100` (string) - 支付金额
 ```
 
 ## File list
@@ -96,7 +118,7 @@ components:
         "path": "/refund.vue",
         "type": "Vue",
         "description": "ui of refund",
-        "dependencies": ["/refund_api_mock.js"],
+        "dependencies": [],
         "action": "NoChange"
     },
     ...
@@ -138,15 +160,15 @@ Provided as list of json objects including following members:
 - path: file relative paths under the package name above and file name 
 - type: file type, for backend files, must be one of the values ['Vue', 'api-mock.js']
 - description: a section describing what contents should be placed in this file.
-- dependencies: a list of file names that this file has dependency on, like: Vue depends on api-mock.js
+- dependencies: a list of file names that this file has dependency on, can be [] now
 - action: must be one of the values below: 
     - NoChange: for later design update, if this file need not to be changed
     - Created: all the files will have this action when it's first created
     - Updated: for later design update, if this file need to be updated for this design update
     - Deleted: for later design update, if this file need to be deleted for this design update
 
-## Endpoints to implement: use openai 3.0.0 specification to list all the endpoints we should implement in this module. 
-NOTICE: you must declare all the data objects referenced in this module under node 'components'.
+## Endpoints to implement: use API Blueprint specification to list all the endpoints we should implement in this module. 
+NOTICE: you must also declare all the data objects referenced in this module in addition to endpoints.
 the properties of each component can be derived from the ui description. eg table columns/form items if not specified explicitly. 
 
 ## Anything UNCLEAR: Provide as Plain text. Make clear here.

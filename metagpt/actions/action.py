@@ -285,7 +285,7 @@ class Action:
             else:
                 return ''
 
-    async def comment(self, comment, use_functions=False, is_simple=False) -> str:
+    async def comment(self, comment, use_functions=False, is_simple=False, use_cache=True) -> str:
         artifact = self.context.task.artifact
         function_list = self._get_function_list(artifact)
         functions = [function for function in all_functions if function['name'] in function_list]
@@ -294,7 +294,7 @@ class Action:
             prompt, type = SIMPLE_COMMENT_PROMPT.format(comment=comment, origin=artifact.previous_content[-1])
         else:
             prompt, type = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
-        result = await self._aask_v2(prompt, system_msgs=system_msg, use_history=not is_simple, simulate=True, simulate_name=f'comment_{artifact.name}', functions=functions if use_functions else None)
+        result = await self._aask_v2(prompt, system_msgs=system_msg, use_history=not is_simple, simulate=use_cache, simulate_name=f'comment_{artifact.name}', functions=functions if use_functions else None)
         result = artifact.parse(result)
         artifact.save()
         return result

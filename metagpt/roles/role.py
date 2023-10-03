@@ -96,8 +96,8 @@ class RoleContext(BaseModel):
     def history(self) -> list[Message]:
         return self.memory.get()
 
-    async def comment(self, comment, use_functions=False):
-        return await self.todo.comment(comment, use_functions=use_functions)
+    async def comment(self, comment, use_functions=False, use_cache=True):
+        return await self.todo.comment(comment, use_functions=use_functions, use_cache=use_cache)
 
     def commit(self):
         return self.todo.commit()
