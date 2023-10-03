@@ -102,6 +102,9 @@ class RoleContext(BaseModel):
     def commit(self):
         return self.todo.commit()
 
+    def rollback(self):
+        return self.todo.rollback()
+
 
 
 class Role:

@@ -31,14 +31,14 @@ async def test_new_requirement_task():
 
 
 async def test_design():
-    company = init_company('HEthics')
-    module_name = 'Refund'
+    company = init_company('')
+    module_name = 'pay'
     (company.environment.workspace.rootPath / f'docs/DESIGN_{module_name}.md').unlink(True)
-    req = company.environment.artifact_mgr.create_artifact(ArtifactType.RAW_REQUIREMENT, f'REQ_{module_name}.md', path="input-docs")
-    prd = company.environment.artifact_mgr.create_artifact(ArtifactType.PRD, f'PRD_{module_name}.md', path="docs")
-    req.add_watch(prd, 'WRITE_PRD')
-    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'SYSTEM-DESIGN_system_design.md', path="input-docs")
-    company.add_artifact_event(prd)
+    req = company.environment.artifact_mgr.create_artifact(ArtifactType.RAW_REQUIREMENT, f'REQ_{module_name}.md', path="docs")
+    # prd = company.environment.artifact_mgr.create_artifact(ArtifactType.PRD, f'PRD_{module_name}.md', path="docs")
+    # req.add_watch(prd, 'WRITE_PRD')
+    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'SYSTEM-DESIGN_system_design_ui.md', path="input-docs")
+    company.add_artifact_event(req)
     # design
     context = await company.execute_next_task()
     context.commit()
@@ -48,14 +48,12 @@ async def test_design():
     #    - "/file/list" 修改为 "/meeting/file/list"
     #''')
     #context.commit()
-    # company.environment.artifact_mgr.save()
+    company.environment.artifact_mgr.save()
 
 async def test_code():
-    company = init_company('HEthics')
-    module_name = 'Refund'
-    design = company.environment.artifact_mgr.create_artifact(ArtifactType.DESIGN, f'DESIGN_{module_name}.md', path="docs", parse_mapping=Design_Output_Mapping)
-    # TODO parse_mapping use protected attr
-    company.environment.artifact_mgr.create_artifact(ArtifactType.SYSTEM_DESIGN, 'SYSTEM-DESIGN_system_design_ui.md', path="input-docs")
+    company = init_company('', is_load_artifacts=True)
+    design = company.environment.artifact_mgr.get_by_path('docs/DESIGN_pay.md')
+
     company.add_artifact_event(design)
     #  api mock js
     context = await company.execute_next_task()

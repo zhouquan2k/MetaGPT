@@ -27,9 +27,9 @@ ArtifactTypeToAction = {
 
 ArtifactTypeDependency = {
     ArtifactType.SYSTEM_DESIGN: [ActionType.WRITE_DESIGN],
-    ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_PRD],  # ActionType.WRITE_DESIGN
-    ArtifactType.PRD: [ActionType.WRITE_DESIGN],
-    ArtifactType.DESIGN: [ActionType.WRITE_CODE, ]
+    ArtifactType.RAW_REQUIREMENT: [ActionType.WRITE_DESIGN],  # ActionType.WRITE_PRD,
+    # ArtifactType.PRD: [ActionType.WRITE_DESIGN],
+    ArtifactType.DESIGN: [ActionType.WRITE_CODE]
 }
 
 
@@ -98,7 +98,7 @@ class SoftwareCompany(BaseModel):
     def add_artifact_event(self, artifact: Artifact):
         self.environment.publish_event(Event(artifact=artifact))
 
-    async def execute_next_task(self) -> RoleContext:
+    async def execute_next_task(self, use_cache=True) -> RoleContext:
         self._process_events()
         if len(self.environment.task_queue) == 0:
             return None
@@ -109,7 +109,7 @@ class SoftwareCompany(BaseModel):
         llm = LLM()
         action = task.action.value('TODO', context=context, llm=llm)
         action.type = task.action
-        output = await action.process_task(task)
+        output = await action.process_task(task, use_cache=use_cache)
         return context
 
     async def execute_remain_tasks(self):

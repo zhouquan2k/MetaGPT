@@ -107,7 +107,7 @@ class WritePRD(Action):
     def __init__(self, name="", context=None, llm=None, type=None):
         super().__init__(name, context, llm, type=type)
         self.dest_artifact_type = ArtifactType.PRD
-        self._output_mapping = OUTPUT_MAPPING
+        self.output_mapping = OUTPUT_MAPPING
         self._output_cls_name = "prd"
         self.prefix = ACTION_PREFIX
         self.instruction_prompt = INSTRUCTION

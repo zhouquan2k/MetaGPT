@@ -196,7 +196,7 @@ class WriteDesign(Action):
         self.prefix = ACTION_PREFIX
         self.instruction_prompt = INSTRUCTION
         self.example_prompt = FORMAT_EXAMPLE
-        self._output_mapping = OUTPUT_MAPPING
+        self.output_mapping = OUTPUT_MAPPING
         self._output_cls_name = "design"
 
 

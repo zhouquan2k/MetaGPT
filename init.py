@@ -1,10 +1,10 @@
 from metagpt.roles import Architect, Engineer, ProductManager, ProjectManager, QaEngineer
-from metagpt.software_company import SoftwareCompany
+from metagpt.software_company import SoftwareCompany, ArtifactTypeToAction
 from metagpt.artifact import ArtifactType
 from metagpt.schema import Task
 
 
-def init_company(project_name, investment: float = 3.0, code_review: bool = False, run_tests: bool = False, is_load_artifacts=False):
+def init_company(project_name="", investment: float = 3.0, code_review: bool = False, run_tests: bool = False, is_load_artifacts=False):
     company = SoftwareCompany()
     company.environment.init(project_name, is_load=is_load_artifacts)
     company.hire([ProductManager(),
@@ -15,6 +15,14 @@ def init_company(project_name, investment: float = 3.0, code_review: bool = Fals
         # developing features: run tests on the spot and identify bugs (bug fixing capability comes soon!)
         company.hire([QaEngineer()])
     company.invest(investment)
+    for key, artifact in company.environment.artifact_mgr.byPath.items():
+        type = ArtifactTypeToAction.get(artifact.type, None)
+        if type:
+            action = type.value()  # constructor
+            artifact.parse_mapping = action.output_mapping
+            artifact.parse(artifact.content)
+
+
     return company
 
 

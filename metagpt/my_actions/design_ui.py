@@ -21,45 +21,82 @@ from pydantic import BaseModel
 FORMAT_EXAMPLE = """
 ## Package name
 ```python
-"account"
+"refund"
 ```
 
 ## UI Design
-- Transfer Money Dialog
-    * ui structure
-       ...
-    * endpoints referenced and implemented in this module.
-        - to do the transfer: POST /account/transfer
-        - to get the destination accounts constantly used: GET /account/friends
-    * endpoints refencenced implemented by external modules.
-        ...
+- 退费页面
+    * UI结构
+        - 用户搜索栏：包含姓名、诊疗卡号、身份证号输入框和搜索按钮。 在同一行放置所有搜索输入框和按钮。
+        - 用户信息显示区域：显示用户信息表格，包括诊疗卡号、姓名、电话、身份证号、地址、病人ID
+        - 挂号信息显示区域：显示挂号信息表格，包括挂号日期、挂号科室、挂号医生、挂号类型、状态（待诊、已就诊、已退费）、已支付金额。每行有一个控制区域，仅当状态为‘待诊’时，显示‘退费’按钮
+    * UI布局：
+    	- ‘用户搜索栏’在页面顶部占用一行。
+    	- ‘用户信息显示区域’和‘挂号信息显示区域'位于页面主体部分，上下排列，表格为固定高度，各占页面主体部分50%。即使没有数据也显示固定高度。
+    * 事件响应：
+    	- 点击’用户搜索栏‘的搜索按钮: 查询并填入’用户信息显示区域‘表格
+    	- 选中‘用户信息显示区域’表格的一行: 查询并填入‘挂号信息显示区域’表格，对于状态为’待诊‘的’挂号信息‘显示’退费‘按钮。
+    	- 点击’退费‘按钮: 弹出’确认退费对话框‘, 显示退费信息，有‘确认退费’和‘取消’两个按钮
+    	- 点击’确认退费‘按钮: 执行退费操作，并将退费结果显示在对话框中。 
+    	- 点击’关闭‘按钮: 刷新’挂号信息显示区域‘的表格。
+    * 本模块实现和引用的端点
+        - 搜索病人：GET /api/patients
+        - 搜索某个病人的挂号：GET /api/patients/{patentId}/visits
+        - 执行退费：POST /api/refund
+    * 引用但由外部模块实现的端点
+        - 无
 
 ## Endpoints to implement
 ```yaml
 openapi: 3.0.0
 info:
-  title: Account API
+  title: Refund API
 paths:
-  ...
+  /api/patients:
+    get:
+      summary: Search patients
+      parameters:
+      - name: "name"
+          in: "query"
+          required: false
+          description: "姓名"
+          schema:
+            type: "string"
+    `responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Patient'
 components:
-  ...
+  schemas:
+    Patient:
+      type: object
+      properties:
+        patientId:
+          type: string
+        cardNumber:
+          type: string
+        name:
+          type: string
+        ...
 ```
 
 ## File list
 ```python
 [
     {
-        "path": "/frontend/api/account_api_mock.js",
+        "path": "/refund_api_mock.js",
         "type": "api-mock.js",
-        "description": "api of account",
+        "description": "mock data for api of refund",
         "dependencies": [],
         "action": "Created"
     },
     {
-        "path": "/frontend/view/AccountTransfer.vue",
+        "path": "/refund.vue",
         "type": "Vue",
-        "description": "ui of account transfer",
-        "dependencies": ["/frontend/api/account_api_mock.js"],
+        "description": "ui of refund",
+        "dependencies": ["/refund_api_mock.js"],
         "action": "NoChange"
     },
     ...
@@ -76,29 +113,25 @@ You are an architect; the goal is to design a frontend part of a web application
 '''
 
 INSTRUCTION = '''
-Requirement: Fill in the following missing information of 'Design Document' based on the contents of all INPUT sections. Output strictly according to the 'EXAMPLE' section above.
+Requirement: Fill in the following missing information of 'Design Document' based on the contents of all INPUT sections. Try to use the same pattern as 'EXAMPLE' section above. 
 
 Attention: 
-- Max Output: 8192 chars or 2048 tokens. Try to use them up.
 - Use '##' to split sections, not '#', and '## <SECTION_NAME>' SHOULD WRITE BEFORE the code and triple quote.
 - you can call 'get-api' function to know more about endpoints of modules if necessary. 
-- the '...' in examples means content need you to fill in. you must supplement them. don't leave any '...' in code your generated.
+- don't leave any '...' in code your generated.
 
 Below is the format of 'Design Document' including description of each paragraph:
 ```
 ## Package name: Provide as Python str with python triple quoto, concise and clear, characters only use a combination of all lowercase and underscores
 
-## UI Design: detail ui design according to the 'UI需求' in REQ, should includes: 
-    - 1. describe structure/position/layout of ui element like form/table
-        - list all form input items，their types for forms.
-        - list all column names for tables.   
-        - event handlers for ui elements 
-        - don't lose any detail information from section 'UI需求' in REQ.
-    - 2. endpoints referenced and implemented in this module. 
-    - 3. endpoints referenced but in implemented in other modules which can be understood by calling function 'get_api' to know the detail of endpoints.
+## UI Design: detail ui design according to REQ, should includes: 
+    - 1. UI structure: describe each part of ui elements in page. for forms: describe their inputs, component should be used. for tables: describe their column names.
+    - 2. UI layout: describe the layout/position of elements above. eg: row/column layout
+    - 3. Event Handling: what should do when something user action happened.
+    - 4.  endpoints referenced and implemented in this module.
+    - 5. endpoints referenced but in implemented in other modules which can be understood by calling function 'get_api' to know the detail of endpoints.
 NOTICE: 
     - output in Chinese.
-    - must include every detail information in section 'UI需求' in REQ.
 
 ## File list: the list of ONLY REQUIRED files needed to write the program. You must design according to the relevant content in the System Design.  list all the files needed in the order of: Backend api data objects, Backend api services, Backend implementations, Frontend files, Depended files should be listed first.
 Provided as list of json objects including following members:
@@ -139,7 +172,7 @@ OUTPUT_MAPPING = {
 
 
 class WriteDesign(Action):
-    def __init__(self, name, context=None, llm=None, type=None):
+    def __init__(self, name='', context=None, llm=None, type=None):
         super().__init__(name, context, llm, type=type)
         self.desc = "Based on the PRD, think about the system design, and design the corresponding APIs, " \
                     "data structures, library tables, processes, and paths. Please provide your design, feedback " \
@@ -148,7 +181,7 @@ class WriteDesign(Action):
         self.prefix = ACTION_PREFIX
         self.instruction_prompt = INSTRUCTION
         self.example_prompt = FORMAT_EXAMPLE
-        self._output_mapping = OUTPUT_MAPPING
+        self.output_mapping = OUTPUT_MAPPING
         self._output_cls_name = "design"
 
     def create_artifacts(self, event):  # means a task indicating an upstream artifact change, how to generate/change downstream artifacts by this action

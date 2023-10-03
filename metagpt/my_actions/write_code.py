@@ -111,6 +111,8 @@ class WriteCode(Action):
             new_artifact.sub_type = file.type
             artifact.add_watch(new_artifact, "WRITE_CODE")
             system_design.add_watch(new_artifact, "WRITE_CODE")
+            req = artifact.get_dependency_by_type(ArtifactType.RAW_REQUIREMENT)
+            req.add_watch(new_artifact, "WRITE_CODE")
             for dependency in file.dependencies:
                 if dependency.startswith('/'):
                     dependency = package_name + '/' + dependency[1:]

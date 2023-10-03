@@ -7,6 +7,7 @@ from typing import Any
 from metagpt.actions.action_output import ActionOutput
 from metagpt.utils.common import OutputParser
 import json
+from metagpt.utils.common import CodeParser
 
 
 class ArtifactType(Enum):
@@ -46,18 +47,21 @@ class Artifact():
         return self.pending_content[-1] if len(self.pending_content) > 0 else self.content
 
     def parse(self, content: str):
-        if self.parse_mapping:
-            parsed_old_data = OutputParser.parse_data_with_mapping(self.new_content(), self.parse_mapping)
-            parsed_data = OutputParser.parse_data_with_mapping(content, self.parse_mapping)
-            combined_data = parsed_old_data | parsed_data
-            output_class = ActionOutput.create_model_class(self.type.name, self.parse_mapping)
-            self.instruct_content = output_class(**combined_data)
-            self.changes = self.changes | parsed_data
-            self.changes_text = self._parsed_to_str(self.changes)
-            # logger.debug(json.dumps(parsed_data, indent=4, ensure_ascii=False))
-            self.pending_content.append(self._parsed_to_str(combined_data))
+        if self.type == ArtifactType.CODE:  # TODO
+            self.pending_content.append(CodeParser.parse_code(block="", text=content))
         else:
-            self.pending_content.append(content)
+            if self.parse_mapping:
+                parsed_old_data = OutputParser.parse_data_with_mapping(self.new_content(), self.parse_mapping)
+                parsed_data = OutputParser.parse_data_with_mapping(content, self.parse_mapping)
+                combined_data = parsed_old_data | parsed_data
+                output_class = ActionOutput.create_model_class(self.type.name, self.parse_mapping)
+                self.instruct_content = output_class(**combined_data)
+                self.changes = self.changes | parsed_data
+                self.changes_text = self._parsed_to_str(self.changes)
+                # logger.debug(json.dumps(parsed_data, indent=4, ensure_ascii=False))
+                self.pending_content.append(self._parsed_to_str(combined_data))
+            else:
+                self.pending_content.append(content)
 
     def _parsed_to_str(self, parsed):
         str = ''
@@ -86,8 +90,12 @@ class Artifact():
             self.full_path = workspace.rootPath / self.relative_path
             self.full_path.parent.mkdir(parents=True, exist_ok=True)
         if self.full_path.exists() and not self.content:
-            self._load()
-            self.parse(self.content)
+            self.reload()
+
+    def reload(self):
+        self.pending_content = []
+        self._load()
+        self.parse(self.content)
 
     def save(self):
         #if not self.changes:

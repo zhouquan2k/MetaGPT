@@ -10,8 +10,6 @@ from typing import Optional
 import json
 from pathlib import Path
 
-from tenacity import retry, stop_after_attempt, wait_fixed
-
 from metagpt.actions.action_output import ActionOutput
 from metagpt.llm import LLM
 from metagpt.utils.common import OutputParser
@@ -19,13 +17,18 @@ from metagpt.schema import Task, Event
 from metagpt.logs import logger
 from metagpt.artifact import Artifact, ArtifactType
 from enum import Enum
-from metagpt.utils.common import CodeParser
 
 COMMENT_PROMPT = '''
 please revise according to the comment below {comment_supplementary}
 
 COMMENT: ```{comment}
 ```
+'''
+
+SIMPLE_COMMENT_PROMPT = '''
+{comment}
+please revise based on the following document:
+```{origin}```
 '''
 
 COMMENT_SUPPLEMENTARY = ', you can only output modified sections.'
@@ -109,7 +112,7 @@ all_functions = [
 ]
 
 
-class Action(ABC):
+class Action:
     def __init__(self, name: str = '', context=None, llm: LLM = None, type: 'ActionType' = None):
         self.name: str = name  # TODO action name?
         self.type: 'ActionType' = type
@@ -122,7 +125,7 @@ class Action(ABC):
         self.desc = ""
         self.content = ""
         self.instruct_content = None
-        self._output_mapping = None
+        self.output_mapping = None
         self._output_cls_name = None
         # self.multiple_artifacts = False
         self.dest_artifact_type: ArtifactType = None
@@ -177,7 +180,7 @@ class Action(ABC):
         return ActionOutput(content, instruct_content)
 
     async def _aask_v2(self, prompt: str, simulate_name: str = None, simulate: bool = False,
-                       system_msgs: Optional[list[str]] = None, functions: list[str]=None) -> str:
+                       system_msgs: Optional[list[str]] = None, functions: list[str]=None, use_history=True) -> str:
         if not system_msgs:
             system_msgs = []
         # system_msgs.append(self.prefix)
@@ -188,7 +191,7 @@ class Action(ABC):
             self.context.historyMessages.append(self.llm._user_msg(prompt))
             self.context.historyMessages.append(self.llm._assistant_msg(content))
         else:
-            content = await self.llm.aask(prompt, system_msgs, history=self.context.historyMessages, functions=functions)
+            content = await self.llm.aask(prompt, system_msgs, history=self.context.historyMessages if use_history else [], functions=functions)
             # to persist for simulate
             if path:
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -254,7 +257,7 @@ class Action(ABC):
 
     def _get_function_list(self, artifact: Artifact):
         return []
-    async def process_task(self, task: Task) -> str:
+    async def process_task(self, task: Task, use_cache=True) -> str:
         if not task.artifact:
             return ''
 
@@ -267,14 +270,12 @@ class Action(ABC):
             function_list = self._get_function_list(task.artifact)
             functions = [function for function in all_functions if function['name'] in function_list]
             system_msg = [SYSTEM_PROMPT.format(action_prefix=self.prefix)] if self.prefix else []
-            result = await self._aask_v2(prompt, simulate=True, functions=functions, system_msgs=system_msg,
+            result = await self._aask_v2(prompt, simulate=use_cache, functions=functions, system_msgs=system_msg,
                                          simulate_name=f'{task.artifact.type.value}_{prompt_type.value}_{task.artifact.name}')
             # return self._parse_result(result, task.artifact)
-            if task.artifact.type == ArtifactType.CODE:  # TODO
-                task.artifact.pending_content.append(CodeParser.parse_code(block="", text=result))
-            else:
-                task.artifact.parse_mapping = self._output_mapping
-                task.artifact.parse(result)
+            task.artifact.parse_mapping = self.output_mapping
+            task.artifact.parse(result)
+            task.artifact.save()
             return result
         else:  # use artifact content directly or do nothing
             if task.description and not task.artifact.content:
@@ -284,18 +285,23 @@ class Action(ABC):
             else:
                 return ''
 
-    async def comment(self, comment, use_functions=False) -> str:
+    async def comment(self, comment, use_functions=False, is_simple=False) -> str:
         artifact = self.context.task.artifact
         function_list = self._get_function_list(artifact)
         functions = [function for function in all_functions if function['name'] in function_list]
         system_msg = [SYSTEM_PROMPT.format(action_prefix=self.prefix)] if self.prefix else []
-        prompt, type = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
-        result = await self._aask_v2(prompt, system_msgs=system_msg, simulate=True, simulate_name=f'comment_{artifact.name}', functions=functions if use_functions else None)
-        return artifact.parse(result)
+        if is_simple:
+            prompt, type = SIMPLE_COMMENT_PROMPT.format(comment=comment, origin=artifact.previous_content[-1])
+        else:
+            prompt, type = self._get_prompt(self.context.task, prompt_type=PromptType.Comment, comment=comment)
+        result = await self._aask_v2(prompt, system_msgs=system_msg, use_history=not is_simple, simulate=True, simulate_name=f'comment_{artifact.name}', functions=functions if use_functions else None)
+        result = artifact.parse(result)
+        artifact.save()
+        return result
 
     def commit(self):
         artifact = self.context.artifact
-        artifact.save()
+        artifact.reload()
         self.postprocess()
         # reset context after postprocess
         self.context.task = None
@@ -304,6 +310,12 @@ class Action(ABC):
         self.context.historyMessages = []
         self.context.env.publish_event(Event(artifact=artifact))
         return
+
+    # rollback the last step
+    def rollback(self):
+        artifact = self.context.artifact
+        del(self.context.historyMessages[-2:])
+        del(artifact.pending_content[-1:])
 
     def create_artifacts(self, event):
         name = f'{self.dest_artifact_type.value}_{event.artifact.name.split("_", 1)[1]}'

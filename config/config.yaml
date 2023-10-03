@@ -11,7 +11,7 @@ OPENAI_API_BASE: "https://api.openai.com/v1"
 OPENAI_API_MODEL: "gpt-4"
 MAX_TOKENS: 1500
 RPM: 10
-WORKSPACE_ROOT_PATH: "/Users/zhouquan/eclipse-workspace-new/Generated-metagpt"
+WORKSPACE_ROOT_PATH: "/Users/zhouquan/eclipse-workspace-new/prog-wizard/src/app"
 
 #### if Anthropic
 #Anthropic_API_KEY: "YOUR_API_KEY"
