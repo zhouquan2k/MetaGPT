@@ -66,7 +66,7 @@ class WriteCode(Action):
             code_type = artifact.sub_type
             code_ext = artifact.full_path.suffix
             path = self.context.env.workspace.rootPath / 'examples' / f'{code_type}{code_ext}'
-            return FORMAT_EXAMPLE.format(example=path.read_text(), filename=artifact.relative_path)
+            return FORMAT_EXAMPLE.format(example=path.read_text(encoding='utf-8'), filename=artifact.relative_path)
         elif type == PromptCategory.INSTRUCTION:
             return self.instruction_prompt.format(filename=artifact.relative_path)
 

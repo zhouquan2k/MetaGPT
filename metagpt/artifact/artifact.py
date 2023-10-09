@@ -101,14 +101,14 @@ class Artifact():
         #if not self.changes:
         #    return
         logger.info(f"Saving {self.type.name}_{self.name} to {self.full_path}")
-        self.full_path.write_text(self.new_content())
+        self.full_path.write_text(self.new_content(),encoding='utf-8')
         self.previous_content = self.content
         self.content = self.new_content()
         self.pending_content = []
 
     def _load(self):
         logger.info(f"Loading from {self.full_path}")
-        self.previous_content = self.content = self.full_path.read_text()
+        self.previous_content = self.content = self.full_path.read_text(encoding='utf-8')
 
     def add_watch(self, artifact: 'Artifact', action_type: str):
         artifacts_by_type = self.impact_artifacts.setdefault(action_type, [])
